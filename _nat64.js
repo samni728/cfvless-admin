@@ -224,13 +224,99 @@ function makeReadableWebSocketStream(webSocketServer, earlyDataHeader, log) {
     return stream;
 }
 
-// TCP 出站处理函数
+// NAT64 IPv6地址转换函数
+function convertToNAT64IPv6(ipv4Address) {
+    const parts = ipv4Address.split('.');
+    if (parts.length !== 4) {
+        throw new Error('无效的IPv4地址');
+    }
+
+    const hex = parts.map(part => {
+        const num = parseInt(part, 10);
+        if (num < 0 || num > 255) {
+            throw new Error('无效的IPv4地址段');
+        }
+        return num.toString(16).padStart(2, '0');
+    });
+    
+    // 使用多个优质NAT64前缀，提高连接成功率
+    const prefixes = [
+        '64:ff9b::', // Google Public NAT64 (首选)
+        '2001:67c:2b0::', // TREX.CZ (欧洲优质备选)
+        '2001:67c:27e4:1064::', // go6lab (欧洲优质备选)
+        '2602:fc59:b0:64::', // 原脚本中的服务 (保留作为备用)
+    ];
+    const chosenPrefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+    return `[${chosenPrefix}${hex[0]}${hex[1]}:${hex[2]}${hex[3]}]`;
+}
+
+// 获取IPv6代理地址
+async function getIPv6ProxyAddress(domain) {
+    try {
+        const dnsQuery = await fetch(
+            `https://1.1.1.1/dns-query?name=${domain}&type=A`,
+            {
+                headers: {
+                    Accept: 'application/dns-json',
+                },
+            }
+        );
+
+        const dnsResult = await dnsQuery.json();
+        if (dnsResult.Answer && dnsResult.Answer.length > 0) {
+            const aRecord = dnsResult.Answer.find(
+                record => record.type === 1
+            );
+            if (aRecord) {
+                const ipv4Address = aRecord.data;
+                return convertToNAT64IPv6(ipv4Address);
+            }
+        }
+        throw new Error('无法解析域名的IPv4地址');
+    } catch (err) {
+        throw new Error(`DNS解析失败: ${err.message}`);
+    }
+}
+
+// 检查是否为 IPv4 地址
+function isIPv4(address) {
+    const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+    return ipv4Regex.test(address);
+}
+
+// 检查是否为Cloudflare CDN域名
+function isCloudflareHost(hostname) {
+    const cloudflareHosts = [
+        'x.com', 'twitter.com',
+        'openai.com', 'api.openai.com', 'chat.openai.com',
+        'discord.com', 'discordapp.com',
+        'github.com', 'api.github.com',
+        'reddit.com', 'www.reddit.com',
+        'medium.com',
+        'notion.so', 'www.notion.so',
+        'figma.com', 'www.figma.com'
+    ];
+    
+    return cloudflareHosts.some(host => 
+        hostname === host || hostname.endsWith('.' + host)
+    );
+}
+
+// TCP 出站处理函数 - 增强NAT64支持
 async function handleTCPOutBound(remoteSocket, addressRemote, portRemote, rawClientData, webSocket, vlessResponseHeader, log) {
-    async function connectAndWrite(address, port) {
-        const tcpSocket = connect({
-            hostname: address,
-            port: port,
-        });
+    async function connectAndWrite(address, port, isIPv6 = false) {
+        let tcpSocket;
+        if (isIPv6) {
+            tcpSocket = connect({
+                hostname: address,
+                port: port,
+            });
+        } else {
+            tcpSocket = connect({
+                hostname: address,
+                port: port,
+            });
+        }
         remoteSocket.value = tcpSocket;
         log(`connected to ${address}:${port}`);
         const writer = tcpSocket.writable.getWriter();
@@ -239,12 +325,56 @@ async function handleTCPOutBound(remoteSocket, addressRemote, portRemote, rawCli
         return tcpSocket;
     }
 
+    async function retry() {
+        try {
+            // NAT64 重试逻辑：如果直连失败，尝试通过 NAT64
+            log(`开始 NAT64 重试连接到 ${addressRemote}:${portRemote}`);
+            
+            let nat64Address;
+            try {
+                // 尝试获取 IPv6 代理地址
+                nat64Address = await getIPv6ProxyAddress(addressRemote);
+                log(`NAT64 地址转换成功: ${addressRemote} -> ${nat64Address}`);
+            } catch (error) {
+                log(`NAT64 地址转换失败: ${error.message}`);
+                // 如果 DNS 解析失败，使用默认的 NAT64 转换
+                if (isIPv4(addressRemote)) {
+                    nat64Address = convertToNAT64IPv6(addressRemote);
+                    log(`使用默认 NAT64 转换: ${addressRemote} -> ${nat64Address}`);
+                } else {
+                    throw new Error(`无法为 ${addressRemote} 创建 NAT64 地址`);
+                }
+            }
+            
+            const tcpSocket = await connectAndWrite(nat64Address, portRemote, true);
+            tcpSocket.closed
+                .catch((error) => {
+                    console.log('NAT64 retry tcpSocket closed error', error);
+                })
+                .finally(() => {
+                    safeCloseWebSocket(webSocket);
+                });
+            remoteSocketToWS(tcpSocket, webSocket, vlessResponseHeader, null, log);
+        } catch (error) {
+            log(`NAT64 重试也失败: ${error.message}`);
+            safeCloseWebSocket(webSocket);
+        }
+    }
+
     try {
+        // 对于已知的Cloudflare CDN域名，直接使用NAT64
+        if (isCloudflareHost(addressRemote)) {
+            log(`检测到Cloudflare CDN域名 ${addressRemote}，直接使用NAT64`);
+            await retry();
+            return;
+        }
+        
+        // 首先尝试直连
         const tcpSocket = await connectAndWrite(addressRemote, portRemote);
-        remoteSocketToWS(tcpSocket, webSocket, vlessResponseHeader, null, log);
+        remoteSocketToWS(tcpSocket, webSocket, vlessResponseHeader, retry, log);
     } catch (error) {
-        log(`TCP connection failed: ${error.message}`);
-        safeCloseWebSocket(webSocket);
+        log(`直连失败: ${error.message}，准备 NAT64 重试`);
+        await retry();
     }
 }
 
