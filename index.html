@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>订阅聚合管理平台 V2.0</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <style>
         .node-generator-card { margin-bottom: 1rem; }
         .save-to-tag-section { background-color: #f8f9fa; padding: 1rem; border-radius: 0.375rem; }
@@ -577,6 +578,31 @@
             </div>
         </div>
     </div>
+
+    <!-- Footer -->
+    <footer class="bg-light py-4 mt-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6 class="text-muted mb-2">🌐 Cloudflare VLESS/VMess 聚合管理平台</h6>
+                    <p class="text-muted small mb-0">基于 NAT64 技术的高性能代理管理平台</p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <div class="d-flex flex-column align-items-md-end">
+                        <div class="mb-2">
+                            <a href="https://github.com/samni728/cfvless-admin" target="_blank" class="btn btn-outline-primary btn-sm me-2">
+                                <i class="bi bi-github"></i> 📁 项目地址
+                            </a>
+                            <a href="https://github.com/samni728/cfvless-admin" target="_blank" class="btn btn-success btn-sm" onclick="openGitHubStar()">
+                                ⭐ 给个 Star
+                            </a>
+                        </div>
+                        <small class="text-muted">最后更新: 2025 年 8 月 24 日</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
 
     <!-- Modals -->
     
@@ -2946,6 +2972,24 @@
             const ip4 = randomIPInt & 0xFF;
             
             return `${ip1}.${ip2}.${ip3}.${ip4}`;
+        }
+
+        // =================================================================
+        // 页脚功能
+        // =================================================================
+        
+        // 打开 GitHub Star 页面
+        function openGitHubStar() {
+            const githubUrl = 'https://github.com/samni728/cfvless-admin';
+            const starUrl = `${githubUrl}/stargazers`;
+            
+            // 在新窗口打开 GitHub 项目页面
+            window.open(githubUrl, '_blank');
+            
+            // 显示提示信息
+            setTimeout(() => {
+                alert('感谢您的支持！\n\n如果这个项目对您有帮助，请：\n1. 点击 ⭐ Star 按钮\n2. 分享给更多朋友\n3. 提出宝贵建议\n\n您的支持是我持续改进的动力！');
+            }, 500);
         }
 
         // =================================================================
