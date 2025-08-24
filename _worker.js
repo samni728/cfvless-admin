@@ -521,6 +521,66 @@ function generateSimpleNAT64Node(uuid, actualPagesDomain) {
     return `vless://${uuid}@${actualPagesDomain}:${port}?encryption=none&security=tls&sni=${actualPagesDomain}&fp=randomized&type=ws&host=${actualPagesDomain}&path=%2F%3Fed%3D2560#${nodeName}`;
 }
 
+// NAT64 IPv6地址转换函数 - 从简版集成
+function convertToNAT64IPv6(ipv4Address) {
+    const parts = ipv4Address.split('.');
+    if (parts.length !== 4) {
+        throw new Error('无效的IPv4地址');
+    }
+
+    const hex = parts.map(part => {
+        const num = parseInt(part, 10);
+        if (num < 0 || num > 255) {
+            throw new Error('无效的IPv4地址段');
+        }
+        return num.toString(16).padStart(2, '0');
+    });
+    
+    // 创建一个包含多个优质NAT64前缀的列表，按推荐度排序
+    const prefixes = [
+        '64:ff9b::', // 1. Google Public NAT64 (首选)
+        '2001:67c:2b0::', // 2. TREX.CZ (欧洲优质备选)
+        '2001:67c:27e4:1064::', // 3. go6lab (欧洲优质备选)
+        '2602:fc59:b0:64::', // 4. 您原来脚本中的服务 (保留作为备用)
+    ];
+    const chosenPrefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+    return `[${chosenPrefix}${hex[0]}${hex[1]}:${hex[2]}${hex[3]}]`;
+}
+
+// 获取IPv6代理地址 - 从简版集成
+async function getIPv6ProxyAddress(domain) {
+    try {
+        const dnsQuery = await fetch(
+            `https://1.1.1.1/dns-query?name=${domain}&type=A`,
+            {
+                headers: {
+                    Accept: 'application/dns-json',
+                },
+            }
+        );
+
+        const dnsResult = await dnsQuery.json();
+        if (dnsResult.Answer && dnsResult.Answer.length > 0) {
+            const aRecord = dnsResult.Answer.find(
+                record => record.type === 1
+            );
+            if (aRecord) {
+                const ipv4Address = aRecord.data;
+                return convertToNAT64IPv6(ipv4Address);
+            }
+        }
+        throw new Error('无法解析域名的IPv4地址');
+    } catch (err) {
+        throw new Error(`DNS解析失败: ${err.message}`);
+    }
+}
+
+// 检查是否为 IPv4 地址 - 从简版集成
+function isIPv4(address) {
+    const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+    return ipv4Regex.test(address);
+}
+
 // ProxyIP源节点生成函数
 function generateProxyIPSourceNode(userConfig) {
     const proxyConfig = {
@@ -612,7 +672,7 @@ async function createDefaultSourceNodes(userId, userUuid, env, hostName) {
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             `).bind(
                 userId, 
-                'Default NAT64 Source', 
+                '系统默认NAT64源节点', 
                 'nat64', 
                 JSON.stringify(nat64Config), 
                 nat64Node, 
@@ -636,7 +696,7 @@ async function createDefaultSourceNodes(userId, userUuid, env, hostName) {
         
         await env.DB.batch(statements);
         
-        console.log(`为用户 ${userId} 创建了简化的默认NAT64源节点配置并添加到节点池`);
+        console.log(`为用户 ${userId} 创建了系统默认NAT64源节点配置并添加到节点池`);
         console.log(`生成的NAT64节点: ${nat64Node}`);
         return true;
     } catch (e) {
