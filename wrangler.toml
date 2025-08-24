@@ -1,0 +1,25 @@
+name = "subscription-manager"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Pages 配置
+pages_build_output_dir = "./"
+
+# D1 数据库绑定
+[[d1_databases]]
+binding = "DB"
+database_name = "subscription-db"
+database_id = "7919470b-9966-46d2-8bf2-77421a00897a"
+
+# KV 存储绑定
+[[kv_namespaces]]
+binding = "subscription"
+id = "655eece90d1444269cafdc7bc9397e56"
+
+# 环境变量（可选）
+[vars]
+ENVIRONMENT = "production"
+
+# Workers 配置（如果需要单独部署Worker）
+[build]
+command = ""

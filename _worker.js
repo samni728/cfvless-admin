@@ -7,6 +7,676 @@
 // 辅助函数和常量 - 必须在 export default 之前定义
 // =================================================================================
 
+// =================================================================================
+// VLESS 代理核心功能 - 从参考项目复制
+// =================================================================================
+
+const WS_READY_STATE_OPEN = 1;
+const WS_READY_STATE_CLOSING = 2;
+
+// VLESS WebSocket 处理函数
+async function handleVlessWebSocket(request, env) {
+    const webSocketPair = new WebSocketPair();
+    const [client, webSocket] = Object.values(webSocketPair);
+    webSocket.accept();
+
+    let address = "";
+    let portWithRandomLog = "";
+    const log = (info, event) => {
+        console.log(`[${address}:${portWithRandomLog}] ${info}`, event || "");
+    };
+    const earlyDataHeader = request.headers.get("sec-websocket-protocol") || "";
+
+    const readableWebSocketStream = makeReadableWebSocketStream(webSocket, earlyDataHeader, log);
+
+    let remoteSocketWapper = { value: null };
+    let udpStreamWrite = null;
+    let isDns = false;
+
+    // ws --> remote
+    readableWebSocketStream
+        .pipeTo(
+            new WritableStream({
+                async write(chunk, controller) {
+                    if (isDns && udpStreamWrite) {
+                        return udpStreamWrite(chunk);
+                    }
+                    if (remoteSocketWapper.value) {
+                        const writer = remoteSocketWapper.value.writable.getWriter();
+                        await writer.write(chunk);
+                        writer.releaseLock();
+                        return;
+                    }
+
+                    const {
+                        hasError,
+                        message,
+                        portRemote = 443,
+                        addressRemote = "",
+                        rawDataIndex,
+                        vlessVersion = new Uint8Array([0, 0]),
+                        isUDP,
+                    } = await processVlessHeader(chunk, env);
+                    
+                    address = addressRemote;
+                    portWithRandomLog = `${portRemote}--${Math.random()} ${isUDP ? "udp " : "tcp "} `;
+                    
+                    if (hasError) {
+                        throw new Error(message);
+                        return;
+                    }
+                    
+                    // if UDP but port not DNS port, close it
+                    if (isUDP) {
+                        if (portRemote === 53) {
+                            isDns = true;
+                        } else {
+                            throw new Error("UDP proxy only enable for DNS which is port 53");
+                            return;
+                        }
+                    }
+                    
+                    const vlessResponseHeader = new Uint8Array([vlessVersion[0], 0]);
+                    const rawClientData = chunk.slice(rawDataIndex);
+
+                    if (isDns) {
+                        const { write } = await handleUDPOutBound(webSocket, vlessResponseHeader, log);
+                        udpStreamWrite = write;
+                        udpStreamWrite(rawClientData);
+                        return;
+                    }
+                    
+                    handleTCPOutBound(
+                        remoteSocketWapper,
+                        addressRemote,
+                        portRemote,
+                        rawClientData,
+                        webSocket,
+                        vlessResponseHeader,
+                        log
+                    );
+                },
+                close() {
+                    log(`readableWebSocketStream is close`);
+                },
+                abort(reason) {
+                    log(`readableWebSocketStream is abort`, JSON.stringify(reason));
+                },
+            })
+        )
+        .catch((err) => {
+            log("readableWebSocketStream pipeTo error", err);
+        });
+
+    return new Response(null, {
+        status: 101,
+        webSocket: client,
+    });
+}
+
+// 创建 WebSocket 可读流
+function makeReadableWebSocketStream(webSocketServer, earlyDataHeader, log) {
+    let readableStreamCancel = false;
+    const stream = new ReadableStream({
+        start(controller) {
+            webSocketServer.addEventListener("message", (event) => {
+                if (readableStreamCancel) {
+                    return;
+                }
+                const message = event.data;
+                controller.enqueue(message);
+            });
+
+            webSocketServer.addEventListener("close", () => {
+                safeCloseWebSocket(webSocketServer);
+                if (readableStreamCancel) {
+                    return;
+                }
+                controller.close();
+            });
+            
+            webSocketServer.addEventListener("error", (err) => {
+                log("webSocketServer has error");
+                controller.error(err);
+            });
+            
+            // for ws 0rtt
+            const { earlyData, error } = base64ToArrayBuffer(earlyDataHeader);
+            if (error) {
+                controller.error(error);
+            } else if (earlyData) {
+                controller.enqueue(earlyData);
+            }
+        },
+
+        pull(controller) {
+            // if ws can stop read if stream is full, we can implement backpressure
+        },
+        cancel(reason) {
+            if (readableStreamCancel) {
+                return;
+            }
+            log(`ReadableStream was canceled, due to ${reason}`);
+            readableStreamCancel = true;
+            safeCloseWebSocket(webSocketServer);
+        },
+    });
+
+    return stream;
+}
+
+// VLESS 头部处理函数
+async function processVlessHeader(vlessBuffer, env) {
+    if (vlessBuffer.byteLength < 24) {
+        return {
+            hasError: true,
+            message: "invalid data",
+        };
+    }
+    
+    const version = new Uint8Array(vlessBuffer.slice(0, 1));
+    let isValidUser = false;
+    let isUDP = false;
+    const slicedBuffer = new Uint8Array(vlessBuffer.slice(1, 17));
+    const slicedBufferString = stringify(slicedBuffer);
+
+    // 验证用户UUID - 从数据库中查找
+    try {
+        const user = await env.DB.prepare("SELECT id FROM users WHERE user_uuid = ?").bind(slicedBufferString).first();
+        isValidUser = !!user;
+    } catch (e) {
+        console.error('UUID验证失败:', e);
+        isValidUser = false;
+    }
+
+    if (!isValidUser) {
+        return {
+            hasError: true,
+            message: "invalid user",
+        };
+    }
+
+    const optLength = new Uint8Array(vlessBuffer.slice(17, 18))[0];
+    const command = new Uint8Array(vlessBuffer.slice(18 + optLength, 18 + optLength + 1))[0];
+
+    // 0x01 TCP, 0x02 UDP, 0x03 MUX
+    if (command === 1) {
+    } else if (command === 2) {
+        isUDP = true;
+    } else {
+        return {
+            hasError: true,
+            message: `command ${command} is not support, command 01-tcp,02-udp,03-mux`,
+        };
+    }
+    
+    const portIndex = 18 + optLength + 1;
+    const portBuffer = vlessBuffer.slice(portIndex, portIndex + 2);
+    const portRemote = new DataView(portBuffer).getUint16(0);
+
+    let addressIndex = portIndex + 2;
+    const addressBuffer = new Uint8Array(vlessBuffer.slice(addressIndex, addressIndex + 1));
+
+    const addressType = addressBuffer[0];
+    let addressLength = 0;
+    let addressValueIndex = addressIndex + 1;
+    let addressValue = "";
+    
+    switch (addressType) {
+        case 1:
+            addressLength = 4;
+            addressValue = new Uint8Array(vlessBuffer.slice(addressValueIndex, addressValueIndex + addressLength)).join(".");
+            break;
+        case 2:
+            addressLength = new Uint8Array(vlessBuffer.slice(addressValueIndex, addressValueIndex + 1))[0];
+            addressValueIndex += 1;
+            addressValue = new TextDecoder().decode(vlessBuffer.slice(addressValueIndex, addressValueIndex + addressLength));
+            break;
+        case 3:
+            addressLength = 16;
+            const dataView = new DataView(vlessBuffer.slice(addressValueIndex, addressValueIndex + addressLength));
+            const ipv6 = [];
+            for (let i = 0; i < 8; i++) {
+                ipv6.push(dataView.getUint16(i * 2).toString(16));
+            }
+            addressValue = ipv6.join(":");
+            break;
+        default:
+            return {
+                hasError: true,
+                message: `invild addressType is ${addressType}`,
+            };
+    }
+    
+    if (!addressValue) {
+        return {
+            hasError: true,
+            message: `addressValue is empty, addressType is ${addressType}`,
+        };
+    }
+
+    return {
+        hasError: false,
+        addressRemote: addressValue,
+        addressType,
+        portRemote,
+        rawDataIndex: addressValueIndex + addressLength,
+        vlessVersion: version,
+        isUDP,
+    };
+}
+
+// 辅助函数
+function base64ToArrayBuffer(base64Str) {
+    if (!base64Str) {
+        return { error: null };
+    }
+    try {
+        base64Str = base64Str.replace(/-/g, "+").replace(/_/g, "/");
+        const decode = atob(base64Str);
+        const arryBuffer = Uint8Array.from(decode, (c) => c.charCodeAt(0));
+        return { earlyData: arryBuffer.buffer, error: null };
+    } catch (error) {
+        return { error };
+    }
+}
+
+function safeCloseWebSocket(socket) {
+    try {
+        if (socket.readyState === WS_READY_STATE_OPEN || socket.readyState === WS_READY_STATE_CLOSING) {
+            socket.close();
+        }
+    } catch (error) {
+        console.error("safeCloseWebSocket error", error);
+    }
+}
+
+const byteToHex = [];
+for (let i = 0; i < 256; ++i) {
+    byteToHex.push((i + 256).toString(16).slice(1));
+}
+
+function unsafeStringify(arr, offset = 0) {
+    return (
+        byteToHex[arr[offset + 0]] +
+        byteToHex[arr[offset + 1]] +
+        byteToHex[arr[offset + 2]] +
+        byteToHex[arr[offset + 3]] +
+        "-" +
+        byteToHex[arr[offset + 4]] +
+        byteToHex[arr[offset + 5]] +
+        "-" +
+        byteToHex[arr[offset + 6]] +
+        byteToHex[arr[offset + 7]] +
+        "-" +
+        byteToHex[arr[offset + 8]] +
+        byteToHex[arr[offset + 9]] +
+        "-" +
+        byteToHex[arr[offset + 10]] +
+        byteToHex[arr[offset + 11]] +
+        byteToHex[arr[offset + 12]] +
+        byteToHex[arr[offset + 13]] +
+        byteToHex[arr[offset + 14]] +
+        byteToHex[arr[offset + 15]]
+    ).toLowerCase();
+}
+
+function stringify(arr, offset = 0) {
+    const uuid = unsafeStringify(arr, offset);
+    return uuid;
+}
+
+// TCP 出站处理函数 - 支持 NAT64
+async function handleTCPOutBound(remoteSocket, addressRemote, portRemote, rawClientData, webSocket, vlessResponseHeader, log) {
+    async function connectAndWrite(address, port, isIPv6 = false) {
+        let tcpSocket;
+        if (isIPv6) {
+            tcpSocket = connect({
+                hostname: address,
+                port: port,
+            });
+        } else {
+            tcpSocket = connect({
+                hostname: address,
+                port: port,
+            });
+        }
+        remoteSocket.value = tcpSocket;
+        log(`connected to ${address}:${port}`);
+        const writer = tcpSocket.writable.getWriter();
+        await writer.write(rawClientData);
+        writer.releaseLock();
+        return tcpSocket;
+    }
+
+    async function retry() {
+        try {
+            // NAT64 重试逻辑：如果直连失败，尝试通过 NAT64
+            log(`开始 NAT64 重试连接到 ${addressRemote}:${portRemote}`);
+            
+            let nat64Address;
+            try {
+                // 尝试获取 IPv6 代理地址
+                nat64Address = await getIPv6ProxyAddress(addressRemote);
+                log(`NAT64 地址转换成功: ${addressRemote} -> ${nat64Address}`);
+            } catch (error) {
+                log(`NAT64 地址转换失败: ${error.message}`);
+                // 如果 DNS 解析失败，使用默认的 NAT64 转换
+                if (isIPv4(addressRemote)) {
+                    nat64Address = convertToNAT64IPv6(addressRemote);
+                    log(`使用默认 NAT64 转换: ${addressRemote} -> ${nat64Address}`);
+                } else {
+                    throw new Error(`无法为 ${addressRemote} 创建 NAT64 地址`);
+                }
+            }
+            
+            const tcpSocket = await connectAndWrite(nat64Address, portRemote, true);
+            tcpSocket.closed
+                .catch((error) => {
+                    console.log("NAT64 retry tcpSocket closed error", error);
+                })
+                .finally(() => {
+                    safeCloseWebSocket(webSocket);
+                });
+            remoteSocketToWS(tcpSocket, webSocket, vlessResponseHeader, null, log);
+        } catch (error) {
+            log(`NAT64 重试也失败: ${error.message}`);
+            safeCloseWebSocket(webSocket);
+        }
+    }
+
+    try {
+        // 首先尝试直连
+        const tcpSocket = await connectAndWrite(addressRemote, portRemote);
+        remoteSocketToWS(tcpSocket, webSocket, vlessResponseHeader, retry, log);
+    } catch (error) {
+        log(`直连失败: ${error.message}，准备 NAT64 重试`);
+        await retry();
+    }
+}
+
+// 检查是否为 IPv4 地址
+function isIPv4(address) {
+    const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+    return ipv4Regex.test(address);
+}
+
+// 远程 Socket 到 WebSocket 的数据转发
+async function remoteSocketToWS(remoteSocket, webSocket, vlessResponseHeader, retry, log) {
+    let remoteChunkCount = 0;
+    let chunks = [];
+    let vlessHeader = vlessResponseHeader;
+    let hasIncomingData = false;
+
+    await remoteSocket.readable
+        .pipeTo(
+            new WritableStream({
+                start() {},
+                async write(chunk, controller) {
+                    hasIncomingData = true;
+                    if (webSocket.readyState !== WS_READY_STATE_OPEN) {
+                        controller.error("webSocket.readyState is not open, maybe close");
+                    }
+                    if (vlessHeader) {
+                        webSocket.send(await new Blob([vlessHeader, chunk]).arrayBuffer());
+                        vlessHeader = null;
+                    } else {
+                        webSocket.send(chunk);
+                    }
+                },
+                close() {
+                    log(`remoteConnection!.readable is close with hasIncomingData is ${hasIncomingData}`);
+                },
+                abort(reason) {
+                    console.error(`remoteConnection!.readable abort`, reason);
+                },
+            })
+        )
+        .catch((error) => {
+            console.error(`remoteSocketToWS has exception `, error.stack || error);
+            safeCloseWebSocket(webSocket);
+        });
+
+    if (hasIncomingData === false && retry) {
+        log(`retry`);
+        retry();
+    }
+}
+
+// UDP 出站处理函数
+async function handleUDPOutBound(webSocket, vlessResponseHeader, log) {
+    let isVlessHeaderSent = false;
+    const transformStream = new TransformStream({
+        start(controller) {},
+        transform(chunk, controller) {
+            for (let index = 0; index < chunk.byteLength; ) {
+                const lengthBuffer = chunk.slice(index, index + 2);
+                const udpPakcetLength = new DataView(lengthBuffer).getUint16(0);
+                const udpData = new Uint8Array(chunk.slice(index + 2, index + 2 + udpPakcetLength));
+                index = index + 2 + udpPakcetLength;
+                controller.enqueue(udpData);
+            }
+        },
+        flush(controller) {},
+    });
+
+    transformStream.readable
+        .pipeTo(
+            new WritableStream({
+                async write(chunk) {
+                    const resp = await fetch(
+                        "https://1.1.1.1/dns-query",
+                        {
+                            method: "POST",
+                            headers: {
+                                "content-type": "application/dns-message",
+                            },
+                            body: chunk,
+                        }
+                    );
+                    const dnsQueryResult = await resp.arrayBuffer();
+                    const udpSize = dnsQueryResult.byteLength;
+                    const udpSizeBuffer = new Uint8Array([(udpSize >> 8) & 0xff, udpSize & 0xff]);
+                    if (webSocket.readyState === WS_READY_STATE_OPEN) {
+                        log(`doh success and dns message length is ${udpSize}`);
+                        if (isVlessHeaderSent) {
+                            webSocket.send(await new Blob([udpSizeBuffer, dnsQueryResult]).arrayBuffer());
+                        } else {
+                            webSocket.send(await new Blob([vlessResponseHeader, udpSizeBuffer, dnsQueryResult]).arrayBuffer());
+                            isVlessHeaderSent = true;
+                        }
+                    }
+                },
+            })
+        )
+        .catch((error) => {
+            log("dns udp has error" + error);
+        });
+
+    const writer = transformStream.writable.getWriter();
+
+    return {
+        write(chunk) {
+            writer.write(chunk);
+        },
+    };
+}
+
+// =================================================================================
+// 源节点生成器功能 - NAT64 和 ProxyIP
+// =================================================================================
+
+// NAT64源节点生成函数
+function generateNAT64SourceNode(userConfig) {
+    const nat64Config = {
+        userID: userConfig.uuid || crypto.randomUUID(),
+        hostName: userConfig.domain || 'your-worker.workers.dev',
+        nat64Prefix: userConfig.nat64Prefix || '2602:fc59:b0:64::',
+        enableAutoFallback: userConfig.autoFallback !== false
+    };
+    
+    // 生成NAT64增强的VLESS节点 - 参考 _workernat64.js 的格式
+    return `vless://${nat64Config.userID}@${nat64Config.hostName}:443?encryption=none&security=tls&type=ws&host=${nat64Config.hostName}&path=%2F%3Fed%3D2560&sni=${nat64Config.hostName}&fp=random#NAT64_${nat64Config.hostName}`;
+}
+
+// ProxyIP源节点生成函数
+function generateProxyIPSourceNode(userConfig) {
+    const proxyConfig = {
+        userID: userConfig.uuid || crypto.randomUUID(),
+        hostName: userConfig.domain || 'your-worker.workers.dev',
+        proxyIP: userConfig.proxyIP || '',
+        proxyPort: userConfig.proxyPort || '443'
+    };
+    
+    // 生成ProxyIP增强的VLESS节点 - 参考 vlessnoproxyip.js 的格式
+    return `vless://${proxyConfig.userID}@${proxyConfig.hostName}:443?encryption=none&security=tls&type=ws&host=${proxyConfig.hostName}&path=%2F%3Fed%3D2560&sni=${proxyConfig.hostName}&fp=randomized#ProxyIP_${proxyConfig.hostName}`;
+}
+
+// NAT64 IPv6地址转换函数
+function convertToNAT64IPv6(ipv4Address) {
+    const parts = ipv4Address.split('.');
+    if (parts.length !== 4) {
+        throw new Error('无效的IPv4地址');
+    }
+
+    const hex = parts.map(part => {
+        const num = parseInt(part, 10);
+        if (num < 0 || num > 255) {
+            throw new Error('无效的IPv4地址段');
+        }
+        return num.toString(16).padStart(2, '0');
+    });
+    
+    // 创建一个包含多个优质NAT64前缀的列表，按推荐度排序
+    const prefixes = [
+        '64:ff9b::', // 1. Google Public NAT64 (首选)
+        '2001:67c:2b0::', // 2. TREX.CZ (欧洲优质备选)
+        '2001:67c:27e4:1064::', // 3. go6lab (欧洲优质备选)
+        '2602:fc59:b0:64::', // 4. 您原来脚本中的服务 (保留作为备用)
+    ];
+    const chosenPrefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+    return `[${chosenPrefix}${hex[0]}${hex[1]}:${hex[2]}${hex[3]}]`;
+}
+
+// 获取IPv6代理地址
+async function getIPv6ProxyAddress(domain) {
+    try {
+        const dnsQuery = await fetch(
+            `https://1.1.1.1/dns-query?name=${domain}&type=A`,
+            {
+                headers: {
+                    Accept: 'application/dns-json',
+                },
+            }
+        );
+
+        const dnsResult = await dnsQuery.json();
+        if (dnsResult.Answer && dnsResult.Answer.length > 0) {
+            const aRecord = dnsResult.Answer.find(
+                record => record.type === 1
+            );
+            if (aRecord) {
+                const ipv4Address = aRecord.data;
+                return convertToNAT64IPv6(ipv4Address);
+            }
+        }
+        throw new Error('无法解析域名的IPv4地址');
+    } catch (err) {
+        throw new Error(`DNS解析失败: ${err.message}`);
+    }
+}
+
+// 创建用户默认源节点配置
+async function createDefaultSourceNodes(userId, userUuid, env, hostName) {
+    try {
+        // 使用实际的Pages域名，如果没有提供则使用默认值
+        const actualDomain = hostName || 'your-worker.workers.dev';
+        
+        // 创建默认NAT64源节点配置
+        const nat64Config = {
+            uuid: userUuid,
+            domain: actualDomain,
+            nat64Prefix: '2602:fc59:b0:64::',
+            autoFallback: true
+        };
+        
+        const nat64Node = generateNAT64SourceNode(nat64Config);
+        
+        // 创建默认ProxyIP源节点配置
+        const proxyipConfig = {
+            uuid: userUuid,
+            domain: actualDomain,
+            proxyIP: '',
+            proxyPort: '443'
+        };
+        
+        const proxyipNode = generateProxyIPSourceNode(proxyipConfig);
+        
+        // 保存到数据库并自动添加到节点池
+        const statements = [
+            // 保存源节点配置
+            env.DB.prepare(`
+                INSERT INTO source_node_configs 
+                (user_id, config_name, node_type, config_data, generated_node, is_default, enabled) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `).bind(
+                userId, 
+                'Default NAT64 Source', 
+                'nat64', 
+                JSON.stringify(nat64Config), 
+                nat64Node, 
+                true, 
+                true
+            ),
+            env.DB.prepare(`
+                INSERT INTO source_node_configs 
+                (user_id, config_name, node_type, config_data, generated_node, is_default, enabled) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `).bind(
+                userId, 
+                'Default ProxyIP Source', 
+                'proxyip', 
+                JSON.stringify(proxyipConfig), 
+                proxyipNode, 
+                true, 
+                true
+            )
+        ];
+        
+        // 同时添加到节点池
+        const nat64Hash = generateSimpleHash(nat64Node);
+        const proxyipHash = generateSimpleHash(proxyipNode);
+        
+        if (nat64Hash) {
+            statements.push(
+                env.DB.prepare(`
+                    INSERT OR IGNORE INTO node_pool 
+                    (user_id, source_id, node_url, node_hash, status) 
+                    VALUES (?, ?, ?, ?, 'active')
+                `).bind(userId, null, nat64Node, nat64Hash)
+            );
+        }
+        
+        if (proxyipHash) {
+            statements.push(
+                env.DB.prepare(`
+                    INSERT OR IGNORE INTO node_pool 
+                    (user_id, source_id, node_url, node_hash, status) 
+                    VALUES (?, ?, ?, ?, 'active')
+                `).bind(userId, null, proxyipNode, proxyipHash)
+            );
+        }
+        
+        await env.DB.batch(statements);
+        
+        console.log(`为用户 ${userId} 创建了默认源节点配置并添加到节点池`);
+        return true;
+    } catch (e) {
+        console.error('创建默认源节点配置失败:', e);
+        return false;
+    }
+}
+
 // Clash 配置模板
 const clashConfigTemplate = `
 mixed-port: 7890
@@ -201,6 +871,79 @@ function parseNodeLinkForConfig(url) {
 export default {
     async fetch(request, env, ctx) {
         const url = new URL(request.url);
+        
+        // 检查是否为 WebSocket 升级请求（VLESS 代理）
+        const upgradeHeader = request.headers.get("Upgrade");
+        if (upgradeHeader && upgradeHeader === "websocket") {
+            return await handleVlessWebSocket(request, env);
+        }
+
+        // 数据库初始化路由 - 创建源节点配置表
+        if (url.pathname === '/api/init-db' && request.method === 'POST') {
+            try {
+                // 创建源节点配置表
+                await env.DB.prepare(`
+                    CREATE TABLE IF NOT EXISTS source_node_configs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        config_name TEXT NOT NULL,
+                        node_type TEXT NOT NULL CHECK (node_type IN ('nat64', 'proxyip')),
+                        config_data TEXT NOT NULL,
+                        generated_node TEXT NOT NULL,
+                        is_default BOOLEAN DEFAULT FALSE,
+                        enabled BOOLEAN DEFAULT TRUE,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+                    )
+                `).run();
+
+                // 创建索引
+                await env.DB.prepare(`
+                    CREATE INDEX IF NOT EXISTS idx_source_node_configs_user_id ON source_node_configs(user_id)
+                `).run();
+                
+                await env.DB.prepare(`
+                    CREATE INDEX IF NOT EXISTS idx_source_node_configs_type ON source_node_configs(node_type)
+                `).run();
+                
+                await env.DB.prepare(`
+                    CREATE INDEX IF NOT EXISTS idx_source_node_configs_default ON source_node_configs(is_default)
+                `).run();
+
+                // 检查是否需要为users表添加user_uuid字段
+                try {
+                    const userTableInfo = await env.DB.prepare("PRAGMA table_info(users)").all();
+                    const hasUserUuid = userTableInfo.results.some(col => col.name === 'user_uuid');
+                    
+                    if (!hasUserUuid) {
+                        await env.DB.prepare("ALTER TABLE users ADD COLUMN user_uuid TEXT UNIQUE").run();
+                        await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_users_uuid ON users(user_uuid)").run();
+                        console.log('已为users表添加user_uuid字段');
+                    }
+                } catch (e) {
+                    console.log('用户表结构检查/更新失败:', e.message);
+                }
+
+                return new Response(JSON.stringify({ 
+                    message: '数据库初始化成功',
+                    tables_created: ['source_node_configs'],
+                    indexes_created: ['idx_source_node_configs_user_id', 'idx_source_node_configs_type', 'idx_source_node_configs_default'],
+                    timestamp: new Date().toISOString()
+                }), { 
+                    headers: { 'Content-Type': 'application/json' } 
+                });
+            } catch (e) {
+                console.error('数据库初始化失败:', e);
+                return new Response(JSON.stringify({ 
+                    error: `数据库初始化失败: ${e.message}`,
+                    stack: e.stack
+                }), { 
+                    status: 500, 
+                    headers: { 'Content-Type': 'application/json' } 
+                });
+            }
+        }
 
         // 调试路由 - 检查数据库连接和表结构
         if (url.pathname === '/api/debug' && request.method === 'GET') {
@@ -274,8 +1017,30 @@ export default {
                 const hashedPassword = await hashPassword(password);
                 console.log('密码哈希完成');
                 
-                await env.DB.prepare("INSERT INTO users (username, hashed_password) VALUES (?, ?)").bind(username, hashedPassword).run();
+                // 生成用户UUID
+                const userUuid = crypto.randomUUID();
+                console.log('生成用户UUID:', userUuid);
+                
+                // 创建用户（包含UUID）
+                const insertResult = await env.DB.prepare("INSERT INTO users (username, hashed_password, user_uuid) VALUES (?, ?, ?)").bind(username, hashedPassword, userUuid).run();
                 console.log('用户创建成功');
+                
+                // 获取新创建的用户ID
+                const newUserId = insertResult.meta.last_row_id;
+                console.log('新用户ID:', newUserId);
+                
+                // 创建默认源节点配置
+                if (newUserId) {
+                    console.log('开始创建默认源节点配置...');
+                    // 获取当前请求的域名作为默认域名
+                    const currentHostName = request.headers.get('Host') || 'your-worker.workers.dev';
+                    const defaultNodesCreated = await createDefaultSourceNodes(newUserId, userUuid, env, currentHostName);
+                    if (defaultNodesCreated) {
+                        console.log('默认源节点配置创建成功');
+                    } else {
+                        console.log('默认源节点配置创建失败，但用户注册成功');
+                    }
+                }
                 
                 return new Response(JSON.stringify({ message: '注册成功' }), { 
                     status: 201, 
@@ -1094,6 +1859,311 @@ export default {
                 console.error('批量操作失败:', e);
                 return new Response(JSON.stringify({ 
                     error: `批量操作失败: ${e.message}` 
+                }), { 
+                    status: 500, 
+                    headers: { 'Content-Type': 'application/json' } 
+                });
+            }
+        }
+
+        // 源节点配置管理路由 =========================================================
+
+        // 路由: 获取源节点配置列表 (GET /api/source-nodes) - 受保护
+        if (url.pathname === '/api/source-nodes' && request.method === 'GET') {
+            try {
+                const user = await getUserBySession(request, env);
+                if (!user) return new Response(JSON.stringify({ error: '未授权' }), { status: 401 });
+
+                const { results } = await env.DB.prepare(`
+                    SELECT id, config_name, node_type, config_data, generated_node, is_default, enabled, created_at 
+                    FROM source_node_configs 
+                    WHERE user_id = ? 
+                    ORDER BY is_default DESC, created_at DESC
+                `).bind(user.id).all();
+
+                return new Response(JSON.stringify(results || []), { 
+                    headers: { 'Content-Type': 'application/json' } 
+                });
+            } catch (e) {
+                console.error('获取源节点配置失败:', e);
+                return new Response(JSON.stringify({ 
+                    error: `获取源节点配置失败: ${e.message}` 
+                }), { 
+                    status: 500, 
+                    headers: { 'Content-Type': 'application/json' } 
+                });
+            }
+        }
+
+        // 路由: 创建源节点配置 (POST /api/source-nodes) - 受保护
+        if (url.pathname === '/api/source-nodes' && request.method === 'POST') {
+            try {
+                const user = await getUserBySession(request, env);
+                if (!user) return new Response(JSON.stringify({ error: '未授权' }), { status: 401 });
+
+                const { config_name, node_type, config_data } = await request.json();
+                
+                if (!config_name || !node_type || !config_data) {
+                    return new Response(JSON.stringify({ error: '配置名称、节点类型和配置数据不能为空' }), { 
+                        status: 400 
+                    });
+                }
+
+                if (!['nat64', 'proxyip'].includes(node_type)) {
+                    return new Response(JSON.stringify({ error: '节点类型必须是 nat64 或 proxyip' }), { 
+                        status: 400 
+                    });
+                }
+
+                // 生成源节点
+                let generatedNode;
+                try {
+                    if (node_type === 'nat64') {
+                        generatedNode = generateNAT64SourceNode(config_data);
+                    } else if (node_type === 'proxyip') {
+                        generatedNode = generateProxyIPSourceNode(config_data);
+                    }
+                } catch (e) {
+                    return new Response(JSON.stringify({ error: `生成源节点失败: ${e.message}` }), { 
+                        status: 400 
+                    });
+                }
+
+                // 保存到数据库并添加到节点池
+                const nodeHash = generateSimpleHash(generatedNode);
+                const statements = [
+                    // 保存源节点配置
+                    env.DB.prepare(`
+                        INSERT INTO source_node_configs 
+                        (user_id, config_name, node_type, config_data, generated_node, is_default, enabled) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    `).bind(
+                        user.id, 
+                        config_name, 
+                        node_type, 
+                        JSON.stringify(config_data), 
+                        generatedNode, 
+                        false, 
+                        true
+                    )
+                ];
+                
+                // 同时添加到节点池
+                if (nodeHash) {
+                    statements.push(
+                        env.DB.prepare(`
+                            INSERT OR IGNORE INTO node_pool 
+                            (user_id, source_id, node_url, node_hash, status) 
+                            VALUES (?, ?, ?, ?, 'active')
+                        `).bind(user.id, null, generatedNode, nodeHash)
+                    );
+                }
+                
+                await env.DB.batch(statements);
+
+                return new Response(JSON.stringify({ 
+                    message: '源节点配置创建成功',
+                    generated_node: generatedNode
+                }), { 
+                    status: 201,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+            } catch (e) {
+                console.error('创建源节点配置失败:', e);
+                return new Response(JSON.stringify({ 
+                    error: `创建源节点配置失败: ${e.message}` 
+                }), { 
+                    status: 500, 
+                    headers: { 'Content-Type': 'application/json' } 
+                });
+            }
+        }
+
+        // 路由: 生成源节点 (POST /api/generate-source-node) - 受保护
+        if (url.pathname === '/api/generate-source-node' && request.method === 'POST') {
+            try {
+                const user = await getUserBySession(request, env);
+                if (!user) return new Response(JSON.stringify({ error: '未授权' }), { status: 401 });
+
+                const { node_type, config_data } = await request.json();
+                
+                if (!node_type || !config_data) {
+                    return new Response(JSON.stringify({ error: '节点类型和配置数据不能为空' }), { 
+                        status: 400 
+                    });
+                }
+
+                if (!['nat64', 'proxyip'].includes(node_type)) {
+                    return new Response(JSON.stringify({ error: '节点类型必须是 nat64 或 proxyip' }), { 
+                        status: 400 
+                    });
+                }
+
+                // 生成源节点
+                let generatedNode;
+                try {
+                    if (node_type === 'nat64') {
+                        generatedNode = generateNAT64SourceNode(config_data);
+                    } else if (node_type === 'proxyip') {
+                        generatedNode = generateProxyIPSourceNode(config_data);
+                    }
+                } catch (e) {
+                    return new Response(JSON.stringify({ error: `生成源节点失败: ${e.message}` }), { 
+                        status: 400 
+                    });
+                }
+
+                return new Response(JSON.stringify({ 
+                    generated_node: generatedNode,
+                    node_type: node_type,
+                    config_data: config_data
+                }), { 
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+            } catch (e) {
+                console.error('生成源节点失败:', e);
+                return new Response(JSON.stringify({ 
+                    error: `生成源节点失败: ${e.message}` 
+                }), { 
+                    status: 500, 
+                    headers: { 'Content-Type': 'application/json' } 
+                });
+            }
+        }
+
+        // 路由: 更新源节点配置 (PUT /api/source-nodes/:id) - 受保护
+        if (url.pathname.startsWith('/api/source-nodes/') && request.method === 'PUT') {
+            try {
+                const user = await getUserBySession(request, env);
+                if (!user) return new Response(JSON.stringify({ error: '未授权' }), { status: 401 });
+
+                const configId = url.pathname.split('/')[3];
+                if (!configId || isNaN(parseInt(configId))) {
+                    return new Response(JSON.stringify({ error: '无效的配置ID' }), { status: 400 });
+                }
+
+                const { config_name, config_data, enabled } = await request.json();
+                
+                // 验证配置所有权
+                const existingConfig = await env.DB.prepare(
+                    "SELECT id, node_type, is_default FROM source_node_configs WHERE user_id = ? AND id = ?"
+                ).bind(user.id, parseInt(configId)).first();
+
+                if (!existingConfig) {
+                    return new Response(JSON.stringify({ error: '配置不存在或无权限' }), { status: 404 });
+                }
+
+                // 重新生成源节点
+                let generatedNode;
+                if (config_data) {
+                    try {
+                        if (existingConfig.node_type === 'nat64') {
+                            generatedNode = generateNAT64SourceNode(config_data);
+                        } else if (existingConfig.node_type === 'proxyip') {
+                            generatedNode = generateProxyIPSourceNode(config_data);
+                        }
+                    } catch (e) {
+                        return new Response(JSON.stringify({ error: `重新生成源节点失败: ${e.message}` }), { 
+                            status: 400 
+                        });
+                    }
+                }
+
+                // 构建更新语句
+                const updateFields = [];
+                const updateValues = [];
+                
+                if (config_name !== undefined) {
+                    updateFields.push('config_name = ?');
+                    updateValues.push(config_name);
+                }
+                
+                if (config_data !== undefined) {
+                    updateFields.push('config_data = ?');
+                    updateValues.push(JSON.stringify(config_data));
+                }
+                
+                if (generatedNode !== undefined) {
+                    updateFields.push('generated_node = ?');
+                    updateValues.push(generatedNode);
+                }
+                
+                if (enabled !== undefined) {
+                    updateFields.push('enabled = ?');
+                    updateValues.push(enabled);
+                }
+
+                if (updateFields.length === 0) {
+                    return new Response(JSON.stringify({ error: '没有要更新的字段' }), { status: 400 });
+                }
+
+                updateValues.push(user.id, parseInt(configId));
+
+                await env.DB.prepare(`
+                    UPDATE source_node_configs 
+                    SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP 
+                    WHERE user_id = ? AND id = ?
+                `).bind(...updateValues).run();
+
+                return new Response(JSON.stringify({ 
+                    message: '源节点配置更新成功',
+                    generated_node: generatedNode
+                }), { 
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+            } catch (e) {
+                console.error('更新源节点配置失败:', e);
+                return new Response(JSON.stringify({ 
+                    error: `更新源节点配置失败: ${e.message}` 
+                }), { 
+                    status: 500, 
+                    headers: { 'Content-Type': 'application/json' } 
+                });
+            }
+        }
+
+        // 路由: 删除源节点配置 (DELETE /api/source-nodes/:id) - 受保护
+        if (url.pathname.startsWith('/api/source-nodes/') && request.method === 'DELETE') {
+            try {
+                const user = await getUserBySession(request, env);
+                if (!user) return new Response(JSON.stringify({ error: '未授权' }), { status: 401 });
+
+                const configId = url.pathname.split('/')[3];
+                if (!configId || isNaN(parseInt(configId))) {
+                    return new Response(JSON.stringify({ error: '无效的配置ID' }), { status: 400 });
+                }
+
+                // 验证配置所有权和是否为默认配置
+                const existingConfig = await env.DB.prepare(
+                    "SELECT id, config_name, is_default FROM source_node_configs WHERE user_id = ? AND id = ?"
+                ).bind(user.id, parseInt(configId)).first();
+
+                if (!existingConfig) {
+                    return new Response(JSON.stringify({ error: '配置不存在或无权限' }), { status: 404 });
+                }
+
+                if (existingConfig.is_default) {
+                    return new Response(JSON.stringify({ error: '不能删除默认配置' }), { status: 400 });
+                }
+
+                // 删除配置
+                await env.DB.prepare(
+                    "DELETE FROM source_node_configs WHERE user_id = ? AND id = ?"
+                ).bind(user.id, parseInt(configId)).run();
+
+                return new Response(JSON.stringify({ 
+                    message: `源节点配置 "${existingConfig.config_name}" 已删除`
+                }), { 
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+            } catch (e) {
+                console.error('删除源节点配置失败:', e);
+                return new Response(JSON.stringify({ 
+                    error: `删除源节点配置失败: ${e.message}` 
                 }), { 
                     status: 500, 
                     headers: { 'Content-Type': 'application/json' } 
