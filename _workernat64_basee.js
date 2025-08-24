@@ -7,6 +7,7 @@
 import { connect } from "cloudflare:sockets";
 
 const WS_READY_STATE_OPEN = 1;
+const WS_READY_STATE_CLOSING = 2;
 let userID = "728add07-eda9-4447-bde4-3f76d8db020f";
 const cn_hostnames = [""];
 
@@ -224,7 +225,7 @@ function makeReadableWebSocketStream(webSocketServer, earlyDataHeader, log) {
     return stream;
 }
 
-// NAT64 IPv6地址转换函数
+// NAT64 IPv6地址转换函数 - 回归参考代码逻辑
 function convertToNAT64IPv6(ipv4Address) {
     const parts = ipv4Address.split('.');
     if (parts.length !== 4) {
@@ -239,12 +240,12 @@ function convertToNAT64IPv6(ipv4Address) {
         return num.toString(16).padStart(2, '0');
     });
     
-    // 使用多个优质NAT64前缀，提高连接成功率
+    // 创建一个包含多个优质NAT64前缀的列表，按推荐度排序
     const prefixes = [
-        '64:ff9b::', // Google Public NAT64 (首选)
-        '2001:67c:2b0::', // TREX.CZ (欧洲优质备选)
-        '2001:67c:27e4:1064::', // go6lab (欧洲优质备选)
-        '2602:fc59:b0:64::', // 原脚本中的服务 (保留作为备用)
+        '64:ff9b::', // 1. Google Public NAT64 (首选)
+        '2001:67c:2b0::', // 2. TREX.CZ (欧洲优质备选)
+        '2001:67c:27e4:1064::', // 3. go6lab (欧洲优质备选)
+        '2602:fc59:b0:64::', // 4. 您原来脚本中的服务 (保留作为备用)
     ];
     const chosenPrefix = prefixes[Math.floor(Math.random() * prefixes.length)];
     return `[${chosenPrefix}${hex[0]}${hex[1]}:${hex[2]}${hex[3]}]`;
@@ -284,39 +285,14 @@ function isIPv4(address) {
     return ipv4Regex.test(address);
 }
 
-// 检查是否为Cloudflare CDN域名
-function isCloudflareHost(hostname) {
-    const cloudflareHosts = [
-        'x.com', 'twitter.com',
-        'openai.com', 'api.openai.com', 'chat.openai.com',
-        'discord.com', 'discordapp.com',
-        'github.com', 'api.github.com',
-        'reddit.com', 'www.reddit.com',
-        'medium.com',
-        'notion.so', 'www.notion.so',
-        'figma.com', 'www.figma.com'
-    ];
-    
-    return cloudflareHosts.some(host => 
-        hostname === host || hostname.endsWith('.' + host)
-    );
-}
 
-// TCP 出站处理函数 - 增强NAT64支持
+// TCP 出站处理函数 - 回归参考代码逻辑
 async function handleTCPOutBound(remoteSocket, addressRemote, portRemote, rawClientData, webSocket, vlessResponseHeader, log) {
     async function connectAndWrite(address, port, isIPv6 = false) {
-        let tcpSocket;
-        if (isIPv6) {
-            tcpSocket = connect({
-                hostname: address,
-                port: port,
-            });
-        } else {
-            tcpSocket = connect({
-                hostname: address,
-                port: port,
-            });
-        }
+        const tcpSocket = connect({
+            hostname: address,
+            port: port,
+        });
         remoteSocket.value = tcpSocket;
         log(`connected to ${address}:${port}`);
         const writer = tcpSocket.writable.getWriter();
@@ -362,14 +338,7 @@ async function handleTCPOutBound(remoteSocket, addressRemote, portRemote, rawCli
     }
 
     try {
-        // 对于已知的Cloudflare CDN域名，直接使用NAT64
-        if (isCloudflareHost(addressRemote)) {
-            log(`检测到Cloudflare CDN域名 ${addressRemote}，直接使用NAT64`);
-            await retry();
-            return;
-        }
-        
-        // 首先尝试直连
+        // 首先尝试直连 - 遵循参考代码逻辑
         const tcpSocket = await connectAndWrite(addressRemote, portRemote);
         remoteSocketToWS(tcpSocket, webSocket, vlessResponseHeader, retry, log);
     } catch (error) {
@@ -378,7 +347,7 @@ async function handleTCPOutBound(remoteSocket, addressRemote, portRemote, rawCli
     }
 }
 
-// 远程 Socket 到 WebSocket 的数据转发
+// 远程 Socket 到 WebSocket 的数据转发 - 严格按照参考代码逻辑
 async function remoteSocketToWS(remoteSocket, webSocket, vlessResponseHeader, retry, log) {
     let vlessHeader = vlessResponseHeader;
     let hasIncomingData = false;
@@ -401,6 +370,15 @@ async function remoteSocketToWS(remoteSocket, webSocket, vlessResponseHeader, re
                 },
                 close() {
                     log(`remoteConnection!.readable is close with hasIncomingData is ${hasIncomingData}`);
+                    // 关键：严格按照参考代码的retry触发逻辑
+                    if (!hasIncomingData && retry) {
+                        log(`触发NAT64重试: hasIncomingData=${hasIncomingData}, retry=${!!retry}`);
+                        retry();
+                        return;
+                    }
+                    if (webSocket.readyState === WS_READY_STATE_OPEN) {
+                        webSocket.close(1000, "正常关闭");
+                    }
                 },
                 abort(reason) {
                     console.error(`remoteConnection!.readable abort`, reason);

@@ -104,16 +104,3 @@ CREATE INDEX IF NOT EXISTS idx_source_node_configs_user_id ON source_node_config
 CREATE INDEX IF NOT EXISTS idx_source_node_configs_type ON source_node_configs(node_type);
 CREATE INDEX IF NOT EXISTS idx_source_node_configs_default ON source_node_configs(is_default);
 
-如果还没有成功 在运行这个
--- 订阅源表
-CREATE TABLE subscription_sources (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    source_name TEXT NOT NULL,
-    source_url TEXT NOT NULL,
-    fetch_status TEXT DEFAULT 'pending',
-    node_count INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users (id)
-);
