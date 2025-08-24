@@ -2,8 +2,10 @@ name = "subscription-manager"
 compatibility_date = "2024-01-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Pages 配置
-pages_build_output_dir = "./"
+# Pages Functions 配置
+[pages]
+# 指定Functions目录
+functions_dir = "."
 
 # D1 数据库绑定
 [[d1_databases]]
@@ -16,10 +18,6 @@ database_id = "7919470b-9966-46d2-8bf2-77421a00897a"
 binding = "subscription"
 id = "655eece90d1444269cafdc7bc9397e56"
 
-# 环境变量（可选）
+# 环境变量
 [vars]
 ENVIRONMENT = "production"
-
-# Workers 配置（如果需要单独部署Worker）
-[build]
-command = ""
