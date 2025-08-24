@@ -506,17 +506,19 @@ async function handleUDPOutBound(webSocket, vlessResponseHeader, log) {
 // 源节点生成器功能 - NAT64 和 ProxyIP
 // =================================================================================
 
-// NAT64源节点生成函数
-function generateNAT64SourceNode(userConfig) {
-    const nat64Config = {
-        userID: userConfig.uuid || crypto.randomUUID(),
-        hostName: userConfig.domain || 'your-worker.workers.dev',
-        nat64Prefix: userConfig.nat64Prefix || '2602:fc59:b0:64::',
-        enableAutoFallback: userConfig.autoFallback !== false
-    };
-    
-    // 生成NAT64增强的VLESS节点 - 参考 _workernat64.js 的格式
-    return `vless://${nat64Config.userID}@${nat64Config.hostName}:443?encryption=none&security=tls&type=ws&host=${nat64Config.hostName}&path=%2F%3Fed%3D2560&sni=${nat64Config.hostName}&fp=random#NAT64_${nat64Config.hostName}`;
+/**
+ * 生成一个参数完全符合 cf-vless 脚本反检测逻辑的 NAT64 VLESS 节点。
+ * 该函数采用直连模式，Address、SNI 和 Host 均使用实际的 Pages 域名。
+ * @param {string} uuid 用户的 UUID.
+ * @param {string} actualPagesDomain 用户实际部署的 Pages 域名 (e.g., "fq88-2wy.pages.dev").
+ * @returns {string} 一个完整的、可用的 VLESS 链接.
+ */
+function generateSimpleNAT64Node(uuid, actualPagesDomain) {
+    const port = 443; // 使用 443 或其他受支持的 HTTPS 端口
+    const nodeName = actualPagesDomain; // 使用域名作为节点名，简洁明了
+
+    // 关键：严格遵循可用节点的参数，特别是 fp="randomized" 和 path="...ed=2560"
+    return `vless://${uuid}@${actualPagesDomain}:${port}?encryption=none&security=tls&sni=${actualPagesDomain}&fp=randomized&type=ws&host=${actualPagesDomain}&path=%2F%3Fed%3D2560#${nodeName}`;
 }
 
 // ProxyIP源节点生成函数
@@ -586,31 +588,20 @@ async function getIPv6ProxyAddress(domain) {
     }
 }
 
-// 创建用户默认源节点配置
+// 创建用户默认源节点配置 - 简化版本，只生成NAT64节点
 async function createDefaultSourceNodes(userId, userUuid, env, hostName) {
     try {
         // 使用实际的Pages域名，如果没有提供则使用默认值
         const actualDomain = hostName || 'your-worker.workers.dev';
         
-        // 创建默认NAT64源节点配置
+        // 使用新的简化函数生成NAT64源节点
+        const nat64Node = generateSimpleNAT64Node(userUuid, actualDomain);
+        
+        // 创建配置对象用于存储
         const nat64Config = {
             uuid: userUuid,
-            domain: actualDomain,
-            nat64Prefix: '2602:fc59:b0:64::',
-            autoFallback: true
+            domain: actualDomain
         };
-        
-        const nat64Node = generateNAT64SourceNode(nat64Config);
-        
-        // 创建默认ProxyIP源节点配置
-        const proxyipConfig = {
-            uuid: userUuid,
-            domain: actualDomain,
-            proxyIP: '',
-            proxyPort: '443'
-        };
-        
-        const proxyipNode = generateProxyIPSourceNode(proxyipConfig);
         
         // 保存到数据库并自动添加到节点池
         const statements = [
@@ -627,25 +618,11 @@ async function createDefaultSourceNodes(userId, userUuid, env, hostName) {
                 nat64Node, 
                 true, 
                 true
-            ),
-            env.DB.prepare(`
-                INSERT INTO source_node_configs 
-                (user_id, config_name, node_type, config_data, generated_node, is_default, enabled) 
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            `).bind(
-                userId, 
-                'Default ProxyIP Source', 
-                'proxyip', 
-                JSON.stringify(proxyipConfig), 
-                proxyipNode, 
-                true, 
-                true
             )
         ];
         
         // 同时添加到节点池
         const nat64Hash = generateSimpleHash(nat64Node);
-        const proxyipHash = generateSimpleHash(proxyipNode);
         
         if (nat64Hash) {
             statements.push(
@@ -657,19 +634,10 @@ async function createDefaultSourceNodes(userId, userUuid, env, hostName) {
             );
         }
         
-        if (proxyipHash) {
-            statements.push(
-                env.DB.prepare(`
-                    INSERT OR IGNORE INTO node_pool 
-                    (user_id, source_id, node_url, node_hash, status) 
-                    VALUES (?, ?, ?, ?, 'active')
-                `).bind(userId, null, proxyipNode, proxyipHash)
-            );
-        }
-        
         await env.DB.batch(statements);
         
-        console.log(`为用户 ${userId} 创建了默认源节点配置并添加到节点池`);
+        console.log(`为用户 ${userId} 创建了简化的默认NAT64源节点配置并添加到节点池`);
+        console.log(`生成的NAT64节点: ${nat64Node}`);
         return true;
     } catch (e) {
         console.error('创建默认源节点配置失败:', e);
@@ -1919,7 +1887,8 @@ export default {
                 let generatedNode;
                 try {
                     if (node_type === 'nat64') {
-                        generatedNode = generateNAT64SourceNode(config_data);
+                        // 使用简化的NAT64生成函数
+                        generatedNode = generateSimpleNAT64Node(config_data.uuid, config_data.domain);
                     } else if (node_type === 'proxyip') {
                         generatedNode = generateProxyIPSourceNode(config_data);
                     }
@@ -2004,7 +1973,8 @@ export default {
                 let generatedNode;
                 try {
                     if (node_type === 'nat64') {
-                        generatedNode = generateNAT64SourceNode(config_data);
+                        // 使用简化的NAT64生成函数
+                        generatedNode = generateSimpleNAT64Node(config_data.uuid, config_data.domain);
                     } else if (node_type === 'proxyip') {
                         generatedNode = generateProxyIPSourceNode(config_data);
                     }
@@ -2060,7 +2030,8 @@ export default {
                 if (config_data) {
                     try {
                         if (existingConfig.node_type === 'nat64') {
-                            generatedNode = generateNAT64SourceNode(config_data);
+                            // 使用简化的NAT64生成函数
+                            generatedNode = generateSimpleNAT64Node(config_data.uuid, config_data.domain);
                         } else if (existingConfig.node_type === 'proxyip') {
                             generatedNode = generateProxyIPSourceNode(config_data);
                         }
