@@ -40,24 +40,29 @@ cfvless-admin/
 
 **部署步骤：**
 
-1. **点击上方按钮** → 进入 Cloudflare Pages
-2. **选择 "Connect to Git"** → 连接 GitHub 仓库
-3. **选择 GitHub** → 授权访问您的 GitHub 账户
-4. **选择仓库** → `samni728/cfvless-admin`
-5. **配置构建设置**：
+1. **Fork 项目** → 点击右上角 [Fork](https://github.com/samni728/cfvless-admin/fork) 按钮
+2. **点击部署按钮** → 进入 Cloudflare Pages
+3. **选择 "Connect to Git"** → 连接 GitHub 仓库
+4. **选择 GitHub** → 授权访问您的 GitHub 账户
+5. **选择仓库** → 选择您 Fork 后的仓库（例如：`您的用户名/cfvless-admin`）
+6. **配置构建设置**：
    - Framework preset: **None**
    - Build command: **留空**
    - Build output directory: **留空**
-6. **点击 "Save and Deploy"** → 完成！
+7. **点击 "Save and Deploy"** → 完成！
 
 **✅ 优势：**
+
 - ✅ **零配置**：无需设置 API Token
 - ✅ **Web 界面**：完全通过浏览器操作
 - ✅ **自动认证**：Cloudflare 处理所有认证
 - ✅ **自动更新**：代码推送后自动重新部署
 - ✅ **用户友好**：适合所有技术水平
+- ✅ **独立部署**：每个用户部署自己的版本
 
 **⚠️ 重要提醒：**
+
+- **必须先 Fork 项目**：用户需要先 Fork 到自己的 GitHub 账户
 - 部署成功后，您需要**手动创建** D1 数据库和 KV 命名空间
 - 详细步骤请参考下方的"部署后配置"部分
 
