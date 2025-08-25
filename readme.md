@@ -32,15 +32,17 @@ cfvless-admin/
 
 ### 一键部署（推荐）
 
-#### 方式一：GitHub 集成部署（推荐）
+#### 方式一：Cloudflare Dashboard 直接部署（最简单）
 
 [![Deploy to Cloudflare Pages](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Pages-blue?style=for-the-badge&logo=cloudflare)](https://dash.cloudflare.com/?to=/:account/pages/new/create)
+
+**这是最简单的方式，无需设置 API Token！**
 
 **部署步骤：**
 
 1. 点击上方按钮进入 Cloudflare Pages
 2. 选择 **Connect to Git**
-3. 选择 **GitHub** 并授权
+3. 选择 **GitHub** 并授权访问
 4. 选择仓库 `samni728/cfvless-admin`
 5. 配置构建设置：
    - **Framework preset**: None
@@ -48,11 +50,18 @@ cfvless-admin/
    - **Build output directory**: 留空
 6. 点击 **Save and Deploy**
 
-**⚠️ 重要提醒：**
+**✅ 优势：**
+- 无需手动设置 API Token
+- 通过 Web 界面直接操作
+- Cloudflare 自动处理认证
+- 支持自动更新（代码推送后自动重新部署）
 
-- GitHub 集成部署**不会自动创建** D1 数据库和 KV 命名空间
+**⚠️ 重要提醒：**
+- 这种方式**不会自动创建** D1 数据库和 KV 命名空间
 - 部署成功后，您需要**手动创建**这些资源
 - 详细步骤请参考下方的"部署后配置"部分
+
+#### 方式二：GitHub Actions 自动部署（高级用户）
 
 #### 方式二：直接上传部署
 
@@ -88,24 +97,27 @@ chmod +x deploy-simple.sh
 ./deploy-simple.sh
 ```
 
-### GitHub Actions 自动部署
+### GitHub Actions 自动部署（高级用户）
 
-如果项目托管在 GitHub 上，可以设置自动部署：
+如果您需要更高级的自动化部署，可以设置 GitHub Actions：
 
 #### 设置步骤：
 
 ##### 步骤 1：获取 Cloudflare API Token
 
 1. **登录 Cloudflare Dashboard**
+
    - 访问：https://dash.cloudflare.com/
    - 使用您的 Cloudflare 账户登录
 
 2. **创建 API Token**
+
    - 点击右上角头像 → **My Profile**
    - 左侧菜单选择 **API Tokens**
    - 点击 **Create Token**
 
 3. **配置 Token 权限**
+
    - 选择 **Custom token** 模板
    - 设置 Token 名称：`GitHub Actions Deploy`
    - 权限配置：
@@ -121,10 +133,12 @@ chmod +x deploy-simple.sh
 ##### 步骤 2：在 GitHub 仓库中添加密钥
 
 1. **进入 GitHub 仓库设置**
+
    - 访问您的 GitHub 仓库
    - 点击 **Settings** 标签
 
 2. **添加仓库密钥**
+
    - 左侧菜单选择 **Secrets and variables** → **Actions**
    - 点击 **New repository secret**
 
@@ -136,6 +150,7 @@ chmod +x deploy-simple.sh
 ##### 步骤 3：验证设置
 
 1. **检查密钥是否添加成功**
+
    - 在 Secrets 列表中应该看到 `CLOUDFLARE_API_TOKEN`
    - 密钥值会显示为 `***`（隐藏保护）
 
@@ -144,6 +159,7 @@ chmod +x deploy-simple.sh
    - 或者手动触发 GitHub Actions
 
 **⚠️ 重要提醒**：
+
 - API Token 只显示一次，请妥善保存
 - 密钥名称必须完全一致：`CLOUDFLARE_API_TOKEN`
 - 如果 Token 泄露，请立即在 Cloudflare 中删除并重新创建
