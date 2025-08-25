@@ -37,6 +37,7 @@ cfvless-admin/
 [![Deploy to Cloudflare Pages](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Pages-blue?style=for-the-badge&logo=cloudflare)](https://dash.cloudflare.com/?to=/:account/pages/new/create)
 
 **部署步骤：**
+
 1. 点击上方按钮进入 Cloudflare Pages
 2. 选择 **Connect to Git**
 3. 选择 **GitHub** 并授权
@@ -46,6 +47,11 @@ cfvless-admin/
    - **Build command**: 留空
    - **Build output directory**: 留空
 6. 点击 **Save and Deploy**
+
+**⚠️ 重要提醒：**
+- GitHub 集成部署**不会自动创建** D1 数据库和 KV 命名空间
+- 部署成功后，您需要**手动创建**这些资源
+- 详细步骤请参考下方的"部署后配置"部分
 
 #### 方式二：直接上传部署
 
@@ -59,7 +65,7 @@ cfvless-admin/
    ```
 4. 上传以下文件：
    - `_worker.js`
-   - `index.html` 
+   - `index.html`
    - `data.js`
    - `wrangler.toml`
 5. 点击 **Deploy site**
@@ -95,11 +101,13 @@ chmod +x deploy-simple.sh
 如果点击部署按钮后出现 404 错误：
 
 1. **直接访问 Cloudflare Pages**：
+
    - 手动访问：https://dash.cloudflare.com/
    - 进入 **Workers 和 Pages** → **Pages**
    - 点击 **创建应用程序**
 
 2. **检查账户权限**：
+
    - 确保已登录 Cloudflare 账户
    - 确保账户有 Pages 访问权限
 
@@ -107,15 +115,34 @@ chmod +x deploy-simple.sh
    - 直接访问：https://dash.cloudflare.com/?to=/:account/pages/new/create
    - 或者：https://dash.cloudflare.com/?to=/:account/pages
 
-#### 部署后配置
+#### 部署后配置（必需）
 
-部署成功后，还需要：
+**无论使用哪种部署方式，部署成功后都需要手动配置以下资源：**
 
-1. **创建 D1 数据库**（必需）
-2. **创建 KV 命名空间**（必需）
-3. **配置绑定**（必需）
+##### 1. 创建 D1 数据库
+1. 访问 [Cloudflare D1](https://dash.cloudflare.com/?to=/:account/workers/d1)
+2. 点击 **创建数据库**
+3. 输入数据库名称：`cfvless-db`
+4. 创建后，在数据库控制台执行 `d1_init.sql` 中的 SQL 语句
 
-详细步骤请参考下方的"手动部署"部分。
+##### 2. 创建 KV 命名空间
+1. 访问 [Cloudflare KV](https://dash.cloudflare.com/?to=/:account/workers/kv)
+2. 点击 **创建命名空间**
+3. 输入名称：`user-sessions`
+
+##### 3. 配置绑定
+1. 进入您的 Pages 项目设置
+2. 点击 **函数 (Functions)** 标签
+3. 在 **绑定** 部分添加：
+   - **D1 数据库绑定**：
+     - 变量名称：`DB`
+     - D1 数据库：选择刚创建的 `cfvless-db`
+   - **KV 命名空间绑定**：
+     - 变量名称：`subscription`
+     - KV 命名空间：选择刚创建的 `user-sessions`
+4. 点击 **保存**
+
+**完成以上配置后，您的应用就可以正常使用了！**
 
 ### 手动部署
 
