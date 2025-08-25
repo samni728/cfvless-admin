@@ -34,22 +34,24 @@ cfvless-admin/
 
 #### 方式一：Cloudflare Dashboard 直接部署（最简单）
 
-[![Deploy to Cloudflare Pages](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Pages-blue?style=for-the-badge&logo=cloudflare)](https://dash.cloudflare.com/?to=/:account/pages/new/create)
+[![Deploy to Cloudflare Pages](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Pages-blue?style=for-the-badge&logo=cloudflare)](https://dash.cloudflare.com/)
 
 **这是最简单的方式，无需任何配置！**
 
 **部署步骤：**
 
 1. **Fork 项目** → 点击右上角 [Fork](https://github.com/samni728/cfvless-admin/fork) 按钮
-2. **点击部署按钮** → 进入 Cloudflare Pages
-3. **选择 "Connect to Git"** → 连接 GitHub 仓库
-4. **选择 GitHub** → 授权访问您的 GitHub 账户
-5. **选择仓库** → 选择您 Fork 后的仓库（例如：`您的用户名/cfvless-admin`）
-6. **配置构建设置**：
+2. **点击部署按钮** → 进入 Cloudflare Dashboard
+3. **导航到 Pages** → 点击左侧菜单 **Workers 和 Pages** → **Pages**
+4. **创建应用程序** → 点击 **创建应用程序**
+5. **选择 "Connect to Git"** → 连接 GitHub 仓库
+6. **选择 GitHub** → 授权访问您的 GitHub 账户
+7. **选择仓库** → 选择您 Fork 后的仓库（例如：`您的用户名/cfvless-admin`）
+8. **配置构建设置**：
    - Framework preset: **None**
    - Build command: **留空**
    - Build output directory: **留空**
-7. **点击 "Save and Deploy"** → 完成！
+9. **点击 "Save and Deploy"** → 完成！
 
 **✅ 优势：**
 
