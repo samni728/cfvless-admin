@@ -30,7 +30,43 @@ cfvless-admin/
 
 ## 🚀 快速部署
 
-### 准备工作
+### 一键部署（推荐）
+
+[![Deploy to Cloudflare Pages](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Pages-blue?style=for-the-badge&logo=cloudflare)](https://dash.cloudflare.com/?to=/:account/pages/new/create)
+
+**点击上方按钮，然后：**
+
+1. 选择 **直接上传** 方式
+2. 上传项目文件（`_worker.js`、`index.html`、`data.js`）
+3. 按照下方配置步骤设置数据库和绑定
+
+### 命令行部署
+
+如果您已安装 Wrangler CLI：
+
+```bash
+# 克隆项目
+git clone https://github.com/samni728/cfvless-admin.git
+cd cfvless-admin
+
+# 登录 Cloudflare
+wrangler login
+
+# 一键部署
+chmod +x deploy-simple.sh
+./deploy-simple.sh
+```
+
+### GitHub Actions 自动部署
+
+如果项目托管在 GitHub 上，可以设置自动部署：
+
+1. 在 GitHub 仓库设置中添加 `CLOUDFLARE_API_TOKEN` 密钥
+2. 推送代码到 `main` 分支即可自动部署
+
+### 手动部署
+
+#### 准备工作
 
 1. **Cloudflare 账户**: 需要一个 Cloudflare 账户
 2. **D1 数据库**: 用于存储用户数据和订阅信息
@@ -148,7 +184,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 ### 3. 源节点管理
 
 - **NAT64 源节点**: 基于 NAT64 技术的源节点生成
-- **ProxyIP 源节点**: 支持自定义 ProxyIP 的源节点
+- **ProxyIP 源节点**: 支持自定义 ProxyIP Nat64 自定义 (有待开发)
 - **默认节点**: 用户注册时自动创建默认源节点
 
 ### 4. 订阅服务
@@ -186,10 +222,10 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 
 #### 2. **源节点管理**
 
-- **默认源节点**: 用户注册时自动创建 NAT64 和 ProxyIP 源节点
+- **默认源节点**: 用户注册时自动创建 NAT64 （已完成）和 ProxyIP 源节点（有待开发）
 - **节点生成**: 基于源节点生成更多节点
-- **节点配置**: 支持自定义节点参数
-- **节点验证**: 验证节点配置的有效性
+- **节点配置**: 支持自定义节点参数（有待开发）
+- **节点验证**: 验证节点配置的有效性 （有待开发）
 
 ### 📡 订阅服务
 
@@ -228,8 +264,6 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 - 使用节点生成器扩展更多节点
 - 更新订阅获取最新节点列表
 - 配置到客户端使用
-
-
 
 ## 🔧 技术架构
 
@@ -370,11 +404,33 @@ function convertToNAT64IPv6(ipv4Address) {
 
 ## 🙏 致谢
 
-- **甬哥**: 提供基础的 VLESS 代理逻辑
+- **甬哥**: 提供的开源项目 VLESS 代理逻辑
   - 博客: [https://ygkkk.blogspot.com](https://ygkkk.blogspot.com)
   - YouTube: [https://www.youtube.com/@ygkkk](https://www.youtube.com/@ygkkk)
 - **Cloudflare**: 提供强大的边缘计算平台
 - **开源社区**: 各种技术方案和最佳实践
+
+## ⚠️ 重要提醒
+
+### Cloudflare 免费版限制
+
+**请注意，本项目基于 Cloudflare Workers 免费版部署，存在以下限制：**
+
+1. **请求次数限制**: 每天最多 10 万次请求
+2. **数据库存储限制**: D1 数据库有存储容量限制
+3. **共享资源**: 所有用户共享同一个 Cloudflare 账户的免费额度
+
+### 使用建议
+
+- **个人使用**: 适合个人或小团队使用
+- **自建节点**: 如果您有自己的节点，建议导入自己的节点以减少对 Cloudflare 资源的依赖
+- **监控使用量**: 定期检查 Cloudflare 仪表板中的使用情况
+- **升级计划**: 如需更大使用量，可考虑升级到 Cloudflare 付费版
+
+### 节点类型说明
+
+- **Cloudflare 节点**: 使用 Cloudflare 的免费资源，所有用户共享每日限额
+- **自建节点**: 您自己的服务器节点，不占用 Cloudflare 资源
 
 ## ⚠️ 免责声明
 
@@ -390,6 +446,6 @@ function convertToNAT64IPv6(ipv4Address) {
 
 ---
 
-**项目地址**: [GitHub Repository](https://github.com/samni728/cfvless-admin)
+**项目地址**: [CFvless-ADMIN](https://github.com/samni728/cfvless-admin)
 
 **最后更新**: 2025 年 8 月 24 日
