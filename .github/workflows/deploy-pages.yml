@@ -1,18 +1,14 @@
-name: Deploy to Cloudflare Pages (Fixed)
+name: Deploy to Cloudflare Pages (Optimized)
 
 on:
   push:
     branches: [main]
-  workflow_dispatch:
-    inputs:
-      project_name:
-        description: "项目名称"
-        required: true
-        default: "cfvless-admin"
+  workflow_dispatch: # 允许手动触发
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    name: Deploy
     
     steps:
       - name: Checkout
@@ -32,11 +28,13 @@ jobs:
           
           if [ -z "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
             echo "❌ CLOUDFLARE_API_TOKEN 未设置"
+            echo "请在 GitHub 仓库设置中添加 CLOUDFLARE_API_TOKEN 密钥"
             exit 1
           fi
           
           if [ -z "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ]; then
             echo "❌ CLOUDFLARE_ACCOUNT_ID 未设置"
+            echo "请在 GitHub 仓库设置中添加 CLOUDFLARE_ACCOUNT_ID 密钥"
             exit 1
           fi
           
@@ -45,73 +43,63 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
-      - name: Setup Infrastructure
+      - name: Prepare Deployment Artifacts
         run: |
-          set -euo pipefail
+          echo "📦 准备部署产物..."
           
-          PROJECT_NAME="${{ github.event.inputs.project_name || 'cfvless-admin' }}"
-          D1_NAME="subscription-db"
-          KV_BINDING="subscription"
+          # 创建部署目录
+          mkdir -p public
           
-          echo "📋 项目配置:"
-          echo "  项目名称: ${PROJECT_NAME}"
-          echo "  D1 数据库: ${D1_NAME}"
-          echo "  KV 绑定: ${KV_BINDING}"
+          # 复制必要的文件到部署目录
+          cp _worker.js public/
+          cp index.html public/
+          cp data.js public/
           
-          # 创建或获取 KV 命名空间
-          echo "==> 设置 KV 命名空间"
-          KV_OUTPUT=$(wrangler kv namespace create ${KV_BINDING} 2>&1 || echo "可能已存在")
-          echo "${KV_OUTPUT}"
+          echo "✅ 部署产物已准备完成:"
+          echo "   - _worker.js (Cloudflare Functions)"
+          echo "   - index.html (静态页面)"
+          echo "   - data.js (数据文件)"
           
-          # 创建或获取 D1 数据库
-          echo "==> 设置 D1 数据库"
-          D1_OUTPUT=$(wrangler d1 create ${D1_NAME} 2>&1 || echo "可能已存在")
-          echo "${D1_OUTPUT}"
-          
-          # 初始化数据库（如果有 SQL 文件）
-          if [ -f "d1_init.sql" ]; then
-            echo "==> 初始化数据库"
-            wrangler d1 execute ${D1_NAME} --remote --file=d1_init.sql || echo "数据库初始化完成或已存在"
-          fi
-          
-          # 保存项目名称
-          echo "PROJECT_NAME=${PROJECT_NAME}" >> $GITHUB_ENV
-          
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # 显示部署目录内容
+          echo ""
+          echo "📋 部署目录内容:"
+          ls -la public/
 
       - name: Deploy to Cloudflare Pages
         run: |
           echo "🚀 部署到 Cloudflare Pages..."
           
-          # 尝试部署，如果项目不存在则创建
-          if ! wrangler pages deploy . --project-name="${PROJECT_NAME}" --commit-dirty=true; then
-            echo "📋 项目不存在，尝试创建新项目..."
-            
-            # 创建新的 Pages 项目
-            wrangler pages project create "${PROJECT_NAME}" --production-branch=main
-            
-            # 重新尝试部署
-            echo "🔄 重新部署到新创建的项目..."
-            wrangler pages deploy . --project-name="${PROJECT_NAME}" --commit-dirty=true
-          fi
+          # 部署到 Cloudflare Pages
+          wrangler pages deploy ./public \
+            --project-name=cfvless-admin \
+            --commit-dirty=true \
+            --branch=main
           
           echo "✅ 部署完成！"
-          echo "🔗 访问地址: https://${PROJECT_NAME}.pages.dev"
+          echo "🔗 访问地址: https://cfvless-admin.pages.dev"
           
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
-      - name: Post-Deploy Setup
+      - name: Post-Deploy Instructions
         run: |
-          echo "📋 部署后配置提醒："
-          echo "1. 请前往 Cloudflare Dashboard"
-          echo "2. 进入 Workers 和 Pages → Pages → ${PROJECT_NAME}"
-          echo "3. 在设置中绑定以下资源："
-          echo "   - D1 数据库: subscription-db (变量名: DB)"
-          echo "   - KV 命名空间: subscription (变量名: subscription)"
-          echo "4. 绑定完成后，Pages 会自动重新部署"
           echo ""
-          echo "🎉 部署流程完成！"
+          echo "🎉 代码部署成功！"
+          echo ""
+          echo "⚠️  重要提醒：首次部署后需要手动配置资源绑定"
+          echo ""
+          echo "📋 下一步操作（仅首次需要）："
+          echo "1. 前往 Cloudflare Dashboard: https://dash.cloudflare.com"
+          echo "2. 进入 Workers 和 Pages → Pages → cfvless-admin"
+          echo "3. 点击 设置 → 函数"
+          echo "4. 添加以下绑定："
+          echo "   📊 D1 数据库绑定:"
+          echo "      - 变量名: DB"
+          echo "      - D1 数据库: subscription-db"
+          echo "   🗄️  KV 命名空间绑定:"
+          echo "      - 变量名: subscription"
+          echo "      - KV 命名空间: subscription"
+          echo "5. 点击保存，Pages 会自动重新部署"
+          echo ""
+          echo "📖 详细配置指南请参考: DEPLOYMENT_FIX_GUIDE.md"

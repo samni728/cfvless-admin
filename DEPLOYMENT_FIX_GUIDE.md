@@ -1,24 +1,52 @@
-# 🔧 GitHub Actions 部署问题修复指南
+# 🚀 Cloudflare Pages 部署完整指南
 
-## 问题分析
+## 📋 新的部署策略：职责分离
 
-您遇到的错误：
-```
-✘ [ERROR] A request to the Cloudflare API (/accounts/***/pages/projects/cfvless-admin) failed.
-Project not found. The specified project name does not match any of your existing projects. [code: 8000007]
-```
+我们采用了**"职责分离"**的策略，让整个部署流程更加稳定和专业：
 
-**根本原因**：GitHub Actions 尝试部署到一个不存在的 Cloudflare Pages 项目。
+- **开发者/用户（手动）**：负责在 Cloudflare 上一次性创建好 D1 数据库和 KV 命名空间，并手动将它们绑定到 Pages 项目上。这个操作只需要做一次。
+- **GitHub Action（自动）**：负责在每次代码提交后，只将必要的 `_worker.js`, `index.html`, `data.js` 三个文件部署更新到已经配置好的 Pages 项目中。
 
-## 🚀 解决方案（两种方式）
+### 🎯 这样做的好处
 
-### 方案一：手动创建项目（推荐，最稳定）
+1. **流程极其稳定**：不会再有因为 Wrangler 版本更新或配置冲突导致的资源创建失败
+2. **部署产物干净**：生产环境只包含它需要的文件
+3. **职责清晰**：Action 只做它最擅长的事——代码部署
 
-#### 步骤 1：在 Cloudflare Dashboard 创建项目
+## 🚀 完整部署流程
+
+### 步骤 1：手动创建基础设施（一次性操作）
+
+#### 1.1 创建 D1 数据库
 
 1. **登录 Cloudflare Dashboard**
    - 访问：https://dash.cloudflare.com/
-   - 进入 **Workers 和 Pages** → **Pages**
+   - 进入 **Workers 和 Pages** → **D1**
+
+2. **创建数据库**
+   - 点击 **创建数据库**
+   - 数据库名称：`subscription-db`
+   - 点击 **创建**
+
+3. **初始化数据库**
+   - 进入新创建的数据库
+   - 点击 **控制台** 标签
+   - 复制 `d1_init.sql` 文件的内容并执行
+
+#### 1.2 创建 KV 命名空间
+
+1. **进入 KV 存储**
+   - 在 Cloudflare Dashboard 中进入 **Workers 和 Pages** → **KV**
+
+2. **创建命名空间**
+   - 点击 **创建命名空间**
+   - 命名空间名称：`subscription`
+   - 点击 **添加**
+
+#### 1.3 创建 Pages 项目
+
+1. **进入 Pages**
+   - 在 Cloudflare Dashboard 中进入 **Workers 和 Pages** → **Pages**
 
 2. **创建新项目**
    - 点击 **创建应用程序**
@@ -27,44 +55,55 @@ Project not found. The specified project name does not match any of your existin
 
 3. **配置构建设置**
    ```
+   项目名称: cfvless-admin
+   生产分支: main
    框架预设: None
    构建命令: (留空)
-   构建输出目录: (留空)
+   构建输出目录: public
    根目录: (留空)
    ```
 
 4. **保存并部署**
    - 点击 **保存并部署**
-   - 等待首次部署完成（可能会失败，这是正常的）
+   - 等待首次部署完成
 
-#### 步骤 2：触发 GitHub Actions
+### 步骤 2：绑定资源（一次性操作）
 
-1. **推送代码触发部署**
-   ```bash
-   git add .
-   git commit -m "修复部署配置"
-   git push origin main
-   ```
+1. **进入 Pages 项目设置**
+   - 在 Pages 列表中点击 `cfvless-admin` 项目
+   - 点击 **设置** → **函数**
 
-2. **或手动触发**
-   - 进入 GitHub 仓库 → Actions
-   - 选择 "Deploy to Cloudflare Pages (Fixed)"
-   - 点击 "Run workflow"
+2. **绑定 D1 数据库**
+   - 在 **D1 数据库绑定** 部分点击 **添加绑定**
+   - 变量名：`DB`
+   - D1 数据库：选择 `subscription-db`
+   - 点击 **保存**
 
-### 方案二：自动创建项目（已优化）
+3. **绑定 KV 命名空间**
+   - 在 **KV 命名空间绑定** 部分点击 **添加绑定**
+   - 变量名：`subscription`
+   - KV 命名空间：选择 `subscription`
+   - 点击 **保存**
 
-我已经更新了 GitHub Actions 工作流，现在它会：
+4. **等待重新部署**
+   - 保存后 Pages 会自动重新部署
+   - 等待部署完成
 
-1. **尝试部署到现有项目**
-2. **如果项目不存在，自动创建新项目**
-3. **重新部署到新创建的项目**
+### 步骤 3：启用自动部署
 
-直接推送代码即可：
+现在您可以享受自动部署的便利：
+
 ```bash
+# 每次代码更改后，只需推送即可自动部署
 git add .
-git commit -m "使用自动创建项目的部署流程"
+git commit -m "更新功能"
 git push origin main
 ```
+
+GitHub Actions 会自动：
+1. 准备部署产物（只包含必要文件）
+2. 部署到 Cloudflare Pages
+3. 显示部署结果和访问链接
 
 ## 📋 已完成的配置修复
 

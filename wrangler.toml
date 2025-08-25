@@ -2,10 +2,10 @@ name = "cfvless-admin"
 compatibility_date = "2024-01-01"
 
 # [pages_build] 部分是关键
-# 由于我们没有构建步骤，静态文件就在根目录
+# 部署产物目录，只包含必要的文件
 [pages_build]
 # a directory of static assets to upload
-pages_build_output_dir = "./"
+pages_build_output_dir = "./public"
 
 [vars]
 ENVIRONMENT = "production"
