@@ -51,19 +51,25 @@ cfvless-admin/
 6. 点击 **Save and Deploy**
 
 **✅ 优势：**
+
 - 无需手动设置 API Token
 - 通过 Web 界面直接操作
 - Cloudflare 自动处理认证
 - 支持自动更新（代码推送后自动重新部署）
 
 **⚠️ 重要提醒：**
+
 - 这种方式**不会自动创建** D1 数据库和 KV 命名空间
 - 部署成功后，您需要**手动创建**这些资源
 - 详细步骤请参考下方的"部署后配置"部分
 
 #### 方式二：GitHub Actions 自动部署（高级用户）
 
-#### 方式二：直接上传部署
+[![Deploy with GitHub Actions](https://img.shields.io/badge/Deploy%20with-GitHub%20Actions-black?style=for-the-badge&logo=github)](https://github.com/samni728/cfvless-admin/actions)
+
+**如果您需要更高级的自动化部署，可以设置 GitHub Actions：**
+
+#### 方式三：直接上传部署
 
 如果 GitHub 集成遇到问题，可以使用直接上传：
 
