@@ -7,16 +7,22 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Deploy to Cloudflare Pages
-        uses: cloudflare/pages-action@v1
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: cfvless-admin
-          directory: .
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          node-version: "18"
+
+      - name: Install Wrangler
+        run: npm install -g wrangler@latest
+
+      - name: Deploy to Cloudflare Pages
+        run: |
+          echo "🚀 开始部署到 Cloudflare Pages..."
+          wrangler pages deploy . --project-name cfvless-admin --commit-dirty=true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

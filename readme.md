@@ -95,29 +95,29 @@ chmod +x deploy-simple.sh
 #### 设置步骤：
 
 1. **获取 Cloudflare API Token**：
+
    - 访问 [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens)
    - 创建新的 API Token，权限选择：
      - Account: Cloudflare Pages:Edit
-     - Zone: 选择您的域名（如果有）
+     - 如果需要，也可以选择 Zone 权限
 
-2. **获取 Account ID**：
-   - 访问 [Cloudflare Dashboard](https://dash.cloudflare.com/)
-   - 在右侧边栏找到您的 Account ID
+2. **在 GitHub 仓库设置中添加密钥**：
 
-3. **在 GitHub 仓库设置中添加密钥**：
    - 进入 GitHub 仓库 → Settings → Secrets and variables → Actions
-   - 添加以下密钥：
+   - 添加密钥：
      - `CLOUDFLARE_API_TOKEN`: 您的 Cloudflare API Token
-     - `CLOUDflare_ACCOUNT_ID`: 您的 Cloudflare Account ID
+
+**注意**：只需要 API Token，不需要 Account ID
 
 4. **推送代码**：推送代码到 `main` 分支即可自动部署
 
 #### 故障排除：
 
 如果部署失败，请检查：
-- API Token 权限是否正确
-- Account ID 是否正确
+
+- API Token 权限是否正确（需要 Cloudflare Pages:Edit 权限）
 - 项目名称是否已存在（如果存在，请先删除或使用不同名称）
+- GitHub Actions 是否已启用
 
 ### 🔧 故障排除
 
