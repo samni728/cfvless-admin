@@ -30,42 +30,42 @@ cfvless-admin/
 
 ## 🚀 快速部署
 
-### 一键部署（推荐）
+### 🚀 一键部署（推荐）
 
 #### 方式一：Cloudflare Dashboard 直接部署（最简单）
 
 [![Deploy to Cloudflare Pages](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Pages-blue?style=for-the-badge&logo=cloudflare)](https://dash.cloudflare.com/?to=/:account/pages/new/create)
 
-**这是最简单的方式，无需设置 API Token！**
+**这是最简单的方式，无需任何配置！**
 
 **部署步骤：**
 
-1. 点击上方按钮进入 Cloudflare Pages
-2. 选择 **Connect to Git**
-3. 选择 **GitHub** 并授权访问
-4. 选择仓库 `samni728/cfvless-admin`
-5. 配置构建设置：
-   - **Framework preset**: None
-   - **Build command**: 留空
-   - **Build output directory**: 留空
-6. 点击 **Save and Deploy**
+1. **点击上方按钮** → 进入 Cloudflare Pages
+2. **选择 "Connect to Git"** → 连接 GitHub 仓库
+3. **选择 GitHub** → 授权访问您的 GitHub 账户
+4. **选择仓库** → `samni728/cfvless-admin`
+5. **配置构建设置**：
+   - Framework preset: **None**
+   - Build command: **留空**
+   - Build output directory: **留空**
+6. **点击 "Save and Deploy"** → 完成！
 
 **✅ 优势：**
-
-- 无需手动设置 API Token
-- 通过 Web 界面直接操作
-- Cloudflare 自动处理认证
-- 支持自动更新（代码推送后自动重新部署）
+- ✅ **零配置**：无需设置 API Token
+- ✅ **Web 界面**：完全通过浏览器操作
+- ✅ **自动认证**：Cloudflare 处理所有认证
+- ✅ **自动更新**：代码推送后自动重新部署
+- ✅ **用户友好**：适合所有技术水平
 
 **⚠️ 重要提醒：**
-
-- 这种方式**不会自动创建** D1 数据库和 KV 命名空间
-- 部署成功后，您需要**手动创建**这些资源
+- 部署成功后，您需要**手动创建** D1 数据库和 KV 命名空间
 - 详细步骤请参考下方的"部署后配置"部分
 
 #### 方式二：GitHub Actions 自动部署（高级用户）
 
 [![Deploy with GitHub Actions](https://img.shields.io/badge/Deploy%20with-GitHub%20Actions-black?style=for-the-badge&logo=github)](https://github.com/samni728/cfvless-admin/actions)
+
+**⚠️ 注意：推荐使用方式一，更简单！**
 
 **如果您需要更高级的自动化部署，可以设置 GitHub Actions：**
 
@@ -149,6 +149,7 @@ chmod +x deploy-simple.sh
    - 点击 **New repository secret**
 
 3. **设置 API Token 密钥**
+
    - **Name**: `CLOUDFLARE_API_TOKEN`
    - **Value**: 粘贴刚才复制的 Cloudflare API Token
    - 点击 **Add secret**
