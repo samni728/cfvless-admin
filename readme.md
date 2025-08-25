@@ -70,7 +70,9 @@ cfvless-admin/
 
 #### 方式二：GitHub Actions 自动部署（高级用户）
 
-[![Deploy with GitHub Actions](https://img.shields.io/badge/Deploy%20with-GitHub%20Actions-black?style=for-the-badge&logo=github)](https://github.com/samni728/cfvless-admin/actions)
+[![Run on GitHub Actions](https://img.shields.io/badge/Run%20on-GitHub%20Actions-black?style=for-the-badge&logo=github)](../../actions/workflows/deploy-mvp.yml)
+
+[打开本仓库的 Actions 页](../../actions)
 
 **⚠️ 注意：推荐使用方式一，更简单！**
 

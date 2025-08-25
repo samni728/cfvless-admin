@@ -1,23 +1,17 @@
 name = "subscription-manager"
+main = "_worker.js"
 compatibility_date = "2024-01-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Pages Functions 配置
-[pages]
-# 指定Functions目录
-functions_dir = "."
-
-# D1 数据库绑定
+# Workers 发布所需的最小绑定骨架；id 留空，Actions 会在首次创建后写入临时配置
 [[d1_databases]]
 binding = "DB"
 database_name = "subscription-db"
-database_id = "7919470b-9966-46d2-8bf2-77421a00897a"
+# database_id 可留空；Actions 首次创建后会写入临时 merged 配置再发布
 
-# KV 存储绑定
 [[kv_namespaces]]
 binding = "subscription"
-id = "655eece90d1444269cafdc7bc9397e56"
+# id 留空；Actions 首次创建后会写入临时 merged 配置再发布
 
-# 环境变量
 [vars]
 ENVIRONMENT = "production"
