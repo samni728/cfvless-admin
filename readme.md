@@ -28,81 +28,376 @@ cfvless-admin/
 └── _workernat64_basee_fixed.js  # 修复后的基础版本
 ```
 
-## 🚀 快速部署
+## 🚀 部署到 Cloudflare Pages
 
-### 🚀 一键部署（推荐）
+本项目提供多种部署方式，适合不同技术水平的用户：
 
-#### 方式一：Cloudflare Dashboard 直接部署（最简单）
+### 📋 部署方式对比
 
-[![Deploy to Cloudflare Pages](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Pages-blue?style=for-the-badge&logo=cloudflare)](https://dash.cloudflare.com/)
+| 部署方式 | 适合人群 | 优势 | 难度 |
+|---------|---------|------|------|
+| 🌐 **手动部署** | 小白用户 | 可视化、安全、易理解 | ⭐ |
+| 🎯 **命令行部署** | 开发者 | 快速、灵活、可控 | ⭐⭐ |
+| 🤖 **GitHub Actions** | 团队协作 | 自动化、版本控制 | ⭐⭐⭐ |
 
-**这是最简单的方式，无需任何配置！**
+---
 
-**部署步骤：**
+## 🌐 方式一：手动部署（推荐新手）
 
-1. **Fork 项目** → 点击右上角 [Fork](https://github.com/samni728/cfvless-admin/fork) 按钮
-2. **点击部署按钮** → 进入 Cloudflare Dashboard
-3. **导航到 Pages** → 点击左侧菜单 **Workers 和 Pages** → **Pages**
-4. **创建应用程序** → 点击 **创建应用程序**
-5. **选择 "Connect to Git"** → 连接 GitHub 仓库
-6. **选择 GitHub** → 授权访问您的 GitHub 账户
-7. **选择仓库** → 选择您 Fork 后的仓库（例如：`您的用户名/cfvless-admin`）
-8. **配置构建设置**：
-   - Framework preset: **None**
-   - Build command: **留空**
-   - Build output directory: **留空**
-9. **点击 "Save and Deploy"** → 完成！
+### 📋 准备工作
 
-**✅ 优势：**
+在开始之前，您需要：
+- ✅ 一个 Cloudflare 账户（免费即可）
+- ✅ 下载本项目代码到本地
 
-- ✅ **零配置**：无需设置 API Token
-- ✅ **Web 界面**：完全通过浏览器操作
-- ✅ **自动认证**：Cloudflare 处理所有认证
-- ✅ **自动更新**：代码推送后自动重新部署
-- ✅ **用户友好**：适合所有技术水平
-- ✅ **独立部署**：每个用户部署自己的版本
+### 步骤 1：创建 Cloudflare Pages 项目
 
-**⚠️ 重要提醒：**
+#### 1.1 登录 Cloudflare Dashboard
 
-- **必须先 Fork 项目**：用户需要先 Fork 到自己的 GitHub 账户
-- 部署成功后，您需要**手动创建** D1 数据库和 KV 命名空间
-- 详细步骤请参考下方的"部署后配置"部分
+1. **访问 Cloudflare**：
+   - 打开浏览器，访问：https://dash.cloudflare.com
+   - 使用您的账户登录
 
-#### 方式二：GitHub Actions 自动部署（高级用户）
+2. **进入 Pages 服务**：
+   - 在左侧菜单中找到 **Workers 和 Pages**
+   - 点击进入 **Pages** 页面
 
-[![Run on GitHub Actions](https://img.shields.io/badge/Run%20on-GitHub%20Actions-black?style=for-the-badge&logo=github)](../../actions/workflows/deploy-mvp.yml)
+#### 1.2 创建新项目
 
-[打开本仓库的 Actions 页](../../actions)
+1. **开始创建**：
+   - 点击 **创建应用程序** 按钮
+   - 选择 **上传资产** 选项
 
-**⚠️ 注意：推荐使用方式一，更简单！**
+2. **项目配置**：
+   - **项目名称**：输入 `cfvless-admin`（或您喜欢的名称）
+   - 点击 **创建项目**
 
-**如果您需要更高级的自动化部署，可以设置 GitHub Actions：**
+3. **上传文件**：
+   - 将以下 3 个文件拖拽到上传区域：
+     - `index.html`（主页面）
+     - `_worker.js`（后端逻辑）
+     - `data.js`（数据文件）
+   - 点击 **部署站点**
 
-#### 方式三：直接上传部署
+4. **等待部署**：
+   - 系统会自动部署您的文件
+   - 完成后会显示访问地址，如：`https://cfvless-admin.pages.dev`
 
-如果 GitHub 集成遇到问题，可以使用直接上传：
+### 步骤 2：创建 D1 数据库
 
-1. 访问 [Cloudflare Pages](https://dash.cloudflare.com/?to=/:account/pages/new/create)
-2. 选择 **Direct Upload**
-3. 下载项目文件：
-   ```bash
-   git clone https://github.com/samni728/cfvless-admin.git
+#### 2.1 进入 D1 服务
+
+1. **返回主菜单**：
+   - 在 Cloudflare Dashboard 左侧菜单
+   - 点击 **Workers 和 Pages** → **D1**
+
+2. **创建数据库**：
+   - 点击 **创建数据库** 按钮
+   - **数据库名称**：输入 `subscription-db`
+   - 点击 **创建**
+
+#### 2.2 初始化数据库表
+
+1. **进入数据库控制台**：
+   - 点击刚创建的 `subscription-db` 数据库
+   - 选择 **控制台** 标签
+
+2. **执行初始化 SQL**：
+   - 打开项目文件夹中的 `d1_init.sql` 文件
+   - 复制全部内容
+   - 粘贴到控制台的 SQL 输入框中
+   - 点击 **执行** 按钮
+
+3. **验证创建结果**：
+   - 执行成功后，可以运行以下命令查看表：
+   ```sql
+   SELECT name FROM sqlite_master WHERE type='table';
    ```
-4. 上传以下文件：
-   - `_worker.js`
-   - `index.html`
-   - `data.js`
-   - `wrangler.toml`
-5. 点击 **Deploy site**
+   - 应该看到 7 个表被创建
 
-### 命令行部署
+### 步骤 3：创建 KV 命名空间
 
-如果您已安装 Wrangler CLI：
+#### 3.1 进入 KV 服务
+
+1. **访问 KV 页面**：
+   - 在 Cloudflare Dashboard 左侧菜单
+   - 点击 **Workers 和 Pages** → **KV**
+
+2. **创建命名空间**：
+   - 点击 **创建命名空间** 按钮
+   - **命名空间名称**：输入 `subscription`
+   - 点击 **添加**
+
+### 步骤 4：绑定资源到 Pages 项目
+
+#### 4.1 进入 Pages 项目设置
+
+1. **返回 Pages**：
+   - 在 Cloudflare Dashboard 中
+   - 进入 **Workers 和 Pages** → **Pages**
+   - 点击您的 `cfvless-admin` 项目
+
+2. **进入设置页面**：
+   - 点击 **设置** 标签
+   - 选择 **函数** 子标签
+
+#### 4.2 绑定 D1 数据库
+
+1. **添加 D1 绑定**：
+   - 在 **D1 数据库绑定** 部分
+   - 点击 **添加绑定** 按钮
+
+2. **配置绑定**：
+   - **变量名**：输入 `DB`（必须大写）
+   - **D1 数据库**：选择 `subscription-db`
+   - 点击 **保存**
+
+#### 4.3 绑定 KV 命名空间
+
+1. **添加 KV 绑定**：
+   - 在 **KV 命名空间绑定** 部分
+   - 点击 **添加绑定** 按钮
+
+2. **配置绑定**：
+   - **变量名**：输入 `subscription`
+   - **KV 命名空间**：选择 `subscription`
+   - 点击 **保存**
+
+#### 4.4 完成绑定
+
+1. **保存所有设置**：
+   - 确认两个绑定都已添加
+   - 点击页面底部的 **保存** 按钮
+
+2. **等待重新部署**：
+   - 保存后，Pages 会自动重新部署
+   - 等待部署完成（通常 1-2 分钟）
+
+### 步骤 5：验证部署
+
+#### 5.1 访问网站
+
+1. **打开网站**：
+   - 访问您的 Pages 地址：`https://cfvless-admin.pages.dev`
+   - 应该能看到登录页面
+
+2. **测试功能**：
+   - 尝试注册一个新账户
+   - 登录并测试基本功能
+
+#### 5.2 故障排除
+
+如果网站无法正常工作：
+
+1. **检查绑定**：
+   - 确认 D1 和 KV 绑定的变量名正确
+   - `DB`（D1 数据库）和 `subscription`（KV 命名空间）
+
+2. **查看日志**：
+   - 在 Pages 项目中点击 **函数** 标签
+   - 查看实时日志了解错误信息
+
+3. **重新部署**：
+   - 在 Pages 项目中点击 **部署** 标签
+   - 点击最新部署右侧的 **重试** 按钮
+
+---
+
+## 🎯 方式二：命令行部署（推荐开发者）
+
+### 📋 准备工作
+
+#### 安装必需工具
 
 ```bash
-# 克隆项目
-git clone https://github.com/samni728/cfvless-admin.git
-cd cfvless-admin
+# 安装 Node.js（如果未安装）
+# 访问 https://nodejs.org 下载安装
+
+# 安装 Wrangler CLI
+npm install -g wrangler@latest
+
+# 验证安装
+wrangler --version
+```
+
+#### 获取 Cloudflare 凭据
+
+1. **获取 Account ID**：
+   - 登录 Cloudflare Dashboard
+   - 右侧边栏可以看到 Account ID
+
+2. **创建 API Token**：
+   - 访问：https://dash.cloudflare.com/profile/api-tokens
+   - 点击 **Create Token** → **Custom token**
+   - 设置权限：
+     ```
+     ✅ Account:Read
+     ✅ User:Read
+     ✅ Cloudflare Pages:Edit
+     ✅ Workers Scripts:Edit
+     ✅ Workers KV Storage:Edit
+     ✅ D1:Edit
+     ```
+   - 创建并复制 Token
+
+### 🚀 使用智能菜单部署
+
+#### 设置环境变量
+
+```bash
+# 设置 Cloudflare 凭据
+export CLOUDFLARE_ACCOUNT_ID=你的账号ID
+export CLOUDFLARE_API_TOKEN=你的API_Token
+
+# 验证设置
+wrangler whoami
+```
+
+#### 运行部署脚本
+
+```bash
+# 给脚本执行权限
+chmod +x deploy-menu.sh
+
+# 运行智能菜单
+./deploy-menu.sh
+```
+
+#### 菜单选项说明
+
+- **选项 1**：🗄️ 初始化资源（创建 D1 数据库和 KV 命名空间）
+- **选项 2**：🚀 部署代码（仅部署 3 个核心文件）
+- **选项 3**：🔄 重新部署（绑定资源后使用此选项）
+- **选项 4**：📊 检查状态（查看资源和部署状态）
+- **选项 5**：🎯 完整流程（初始化 + 部署，新手推荐）
+- **选项 6**：❌ 退出
+
+#### 推荐的首次部署流程
+
+1. **选择选项 5（完整流程）**：
+   - 自动创建 D1 数据库和 KV 命名空间
+   - 初始化数据库表结构
+   - 创建 Pages 项目并部署
+
+2. **手动绑定资源**：
+   - 前往 Cloudflare Dashboard
+   - 进入 Pages 项目设置
+   - 绑定 D1 和 KV 资源（参考手动部署步骤 4）
+
+3. **重新部署**：
+   - 回到菜单，选择 **选项 3（重新部署）**
+   - 确保绑定生效
+
+### 🔧 使用传统脚本部署
+
+如果您喜欢问答式的部署：
+
+```bash
+# 给脚本执行权限
+chmod +x deploy-cli.sh
+
+# 运行部署脚本
+./deploy-cli.sh
+```
+
+脚本会询问是否需要初始化数据库，首次部署选择 `y`。
+
+### 📊 仅初始化数据库
+
+如果只需要创建和初始化数据库：
+
+```bash
+# 给脚本执行权限
+chmod +x init-db-only.sh
+
+# 运行数据库初始化
+./init-db-only.sh
+```
+
+---
+
+## 🤖 方式三：GitHub Actions 自动部署
+
+### 📋 适用场景
+
+- 团队协作开发
+- 需要版本控制
+- 希望代码更新时自动部署
+
+### 🚀 设置步骤
+
+#### 1. Fork 本仓库
+
+1. **Fork 项目**：
+   - 点击 GitHub 页面右上角的 **Fork** 按钮
+   - 选择您的账户
+
+#### 2. 设置 GitHub Secrets
+
+1. **进入仓库设置**：
+   - 在您 Fork 的仓库中
+   - 点击 **Settings** 标签
+
+2. **添加密钥**：
+   - 左侧菜单选择 **Secrets and variables** → **Actions**
+   - 添加以下密钥：
+     - `CLOUDFLARE_API_TOKEN`：您的 API Token
+     - `CLOUDFLARE_ACCOUNT_ID`：您的 Account ID
+
+#### 3. 触发部署
+
+**手动触发**：
+- 进入 **Actions** 标签
+- 选择 **Deploy to Cloudflare Pages (Optimized)**
+- 点击 **Run workflow**
+
+**注意**：当前配置为手动触发，避免意外部署。如需自动触发，请修改 `.github/workflows/deploy-pages.yml` 文件。
+
+---
+
+## 🔧 故障排除
+
+### API Token 权限问题
+
+如果遇到 `Authentication error [code: 10000]` 错误：
+
+1. **检查权限**：确保 API Token 包含所有必需权限
+2. **重新创建 Token**：前往 Cloudflare Dashboard 重新创建
+3. **验证 Account ID**：确保使用正确的 Account ID
+
+### 部署失败问题
+
+1. **检查文件**：确保 `_worker.js`、`index.html`、`data.js` 存在
+2. **查看日志**：检查 Cloudflare Pages 部署日志
+3. **重新绑定**：确认 D1 和 KV 资源正确绑定
+
+### 功能异常问题
+
+1. **检查绑定**：
+   - D1 绑定变量名必须是 `DB`
+   - KV 绑定变量名必须是 `subscription`
+
+2. **数据库初始化**：
+   - 确认数据库表已正确创建
+   - 检查 SQL 执行是否成功
+
+3. **重新部署**：
+   - 绑定资源后需要重新部署才能生效
+
+### 详细文档
+
+- 📖 **完整部署指南**：`CLI_DEPLOYMENT_GUIDE.md`
+- 🔧 **故障排除**：`DEPLOYMENT_FIX_GUIDE.md`
+
+---
+
+### 🚀 一键部署（传统方式）
+
+如果您熟悉命令行操作：
+
+```bash
+# 安装 Wrangler CLI
+npm install -g wrangler
 
 # 登录 Cloudflare
 wrangler login
@@ -220,161 +515,7 @@ chmod +x deploy-simple.sh
    - 请参考 `DEPLOYMENT_FIX_GUIDE.md` 获取详细解决方案
    - 推荐先在 Cloudflare Dashboard 手动创建项目
 
-### 🔧 故障排除
-
-#### 404 错误解决方案
-
-如果点击部署按钮后出现 404 错误：
-
-1. **直接访问 Cloudflare Pages**：
-
-   - 手动访问：https://dash.cloudflare.com/
-   - 进入 **Workers 和 Pages** → **Pages**
-   - 点击 **创建应用程序**
-
-2. **检查账户权限**：
-
-   - 确保已登录 Cloudflare 账户
-   - 确保账户有 Pages 访问权限
-
-3. **使用备用链接**：
-   - 直接访问：https://dash.cloudflare.com/?to=/:account/pages/new/create
-   - 或者：https://dash.cloudflare.com/?to=/:account/pages
-
-#### 部署后配置（必需）
-
-**无论使用哪种部署方式，部署成功后都需要手动配置以下资源：**
-
-##### 1. 创建 D1 数据库
-
-1. 访问 [Cloudflare D1](https://dash.cloudflare.com/?to=/:account/workers/d1)
-2. 点击 **创建数据库**
-3. 输入数据库名称：`cfvless-db`
-4. 创建后，在数据库控制台执行 `d1_init.sql` 中的 SQL 语句
-
-##### 2. 创建 KV 命名空间
-
-1. 访问 [Cloudflare KV](https://dash.cloudflare.com/?to=/:account/workers/kv)
-2. 点击 **创建命名空间**
-3. 输入名称：`user-sessions`
-
-##### 3. 配置绑定
-
-1. 进入您的 Pages 项目设置
-2. 点击 **函数 (Functions)** 标签
-3. 在 **绑定** 部分添加：
-   - **D1 数据库绑定**：
-     - 变量名称：`DB`
-     - D1 数据库：选择刚创建的 `cfvless-db`
-   - **KV 命名空间绑定**：
-     - 变量名称：`subscription`
-     - KV 命名空间：选择刚创建的 `user-sessions`
-4. 点击 **保存**
-
-**完成以上配置后，您的应用就可以正常使用了！**
-
-### 手动部署
-
-#### 准备工作
-
-1. **Cloudflare 账户**: 需要一个 Cloudflare 账户
-2. **D1 数据库**: 用于存储用户数据和订阅信息
-3. **KV 存储**: 用于会话管理
-
-### 部署步骤
-
-#### 1. 创建 D1 数据库
-
-1. 登录 Cloudflare 仪表板 → **Workers 和 Pages** → **D1**
-2. 点击 **创建数据库**，输入名称如 `cfvless-db`
-3. 在数据库控制台中执行以下 SQL：
-
-```sql
--- 用户表
-CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    user_uuid TEXT UNIQUE,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
--- 订阅源表
-CREATE TABLE IF NOT EXISTS subscription_sources (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    name TEXT NOT NULL,
-    url TEXT NOT NULL,
-    enabled BOOLEAN DEFAULT true,
-    last_fetch DATETIME,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-);
-
--- 节点池表
-CREATE TABLE IF NOT EXISTS node_pool (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    node_hash TEXT UNIQUE NOT NULL,
-    node_data TEXT NOT NULL,
-    protocol TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-);
-
--- 标签表
-CREATE TABLE IF NOT EXISTS tags (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    name TEXT NOT NULL,
-    color TEXT DEFAULT '#007bff',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-);
-
--- 节点标签映射表
-CREATE TABLE IF NOT EXISTS node_tag_map (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    node_id INTEGER NOT NULL,
-    tag_id INTEGER NOT NULL,
-    FOREIGN KEY (node_id) REFERENCES node_pool (id) ON DELETE CASCADE,
-    FOREIGN KEY (tag_id) REFERENCES tags (id) ON DELETE CASCADE,
-    UNIQUE(node_id, tag_id)
-);
-
--- 订阅表
-CREATE TABLE IF NOT EXISTS subscriptions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    uuid TEXT UNIQUE NOT NULL,
-    node_data_base64 TEXT,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-);
-```
-
-#### 2. 创建 KV 命名空间
-
-1. 在 Cloudflare 仪表板中 → **Workers 和 Pages** → **KV**
-2. 点击 **创建命名空间**，输入名称如 `user-sessions`
-
-#### 3. 部署到 Cloudflare Pages
-
-1. 在 Cloudflare 仪表板中 → **Workers 和 Pages** → **创建应用程序** → **Pages** → **上传资产**
-2. 项目名称：输入如 `cfvless-admin`
-3. **上传文件**：同时选择 `_worker.js`、`index.html`、`data.js` 三个文件
-4. 点击 **部署站点**
-
-#### 4. 配置绑定
-
-1. 进入项目设置 → **函数 (Functions)**
-2. **绑定 D1 数据库**：
-   - 变量名称：`DB`
-   - D1 数据库：选择刚创建的数据库
-3. **绑定 KV 命名空间**：
-   - 变量名称：`subscription`
-   - KV 命名空间：选择刚创建的命名空间
-4. 点击 **保存**
+---
 
 ## 🎯 核心功能
 

@@ -90,10 +90,14 @@ init_resources() {
     # 初始化数据库表结构
     if [ -f "d1_init.sql" ]; then
         echo "🗃️ 执行数据库初始化..."
-        if wrangler d1 execute $DB_NAME --remote --file=d1_init.sql; then
+        
+        # 使用专门的初始化脚本避免配置冲突
+        echo "📡 使用专用脚本初始化数据库..."
+        if bash init-db-only.sh > /dev/null 2>&1; then
             echo "✅ 数据库表结构初始化成功"
         else
-            echo "⚠️ 数据库初始化失败，请检查 SQL 文件"
+            echo "⚠️ 数据库初始化可能失败，建议手动执行:"
+            echo "   chmod +x init-db-only.sh && ./init-db-only.sh"
         fi
     else
         echo "⚠️ 未找到 d1_init.sql 文件"
@@ -135,11 +139,27 @@ deploy_code() {
     echo "📋 文件详情:"
     ls -lh public/
     
-    # 部署到 Cloudflare Pages
+    # 检查并创建项目
     echo ""
+    echo "🔍 检查项目是否存在..."
+    PROJECT_NAME="cfvless-admin"
+    if ! wrangler pages project list | grep -q "$PROJECT_NAME"; then
+        echo "📋 项目不存在，创建新项目..."
+        if wrangler pages project create "$PROJECT_NAME"; then
+            echo "✅ 项目创建成功"
+        else
+            echo "❌ 项目创建失败"
+            rm -rf public/
+            return 1
+        fi
+    else
+        echo "✅ 项目已存在"
+    fi
+    
+    # 部署到 Cloudflare Pages
     echo "🚀 开始部署..."
     if wrangler pages deploy ./public \
-        --project-name=cfvless-admin \
+        --project-name="$PROJECT_NAME" \
         --commit-dirty=true; then
         
         echo ""

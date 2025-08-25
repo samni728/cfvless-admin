@@ -231,6 +231,26 @@ wrangler kv key get "test-key" --namespace-id=你的KV命名空间ID
 
 ## 🔧 故障排除
 
+### API Token 权限问题（重要！）
+
+如果遇到 `Authentication error [code: 10000]` 错误：
+
+1. **问题原因**：API Token 缺少必要权限
+2. **解决方案**：重新创建 API Token，确保包含以下权限：
+   ```
+   ✅ Account:Read
+   ✅ User:Read (关键！经常被遗漏)
+   ✅ Cloudflare Pages:Edit
+   ✅ Workers Scripts:Edit  
+   ✅ Workers KV Storage:Edit
+   ✅ D1:Edit
+   ```
+3. **验证权限**：
+   ```bash
+   wrangler whoami
+   wrangler pages project list
+   ```
+
 ### 常见问题
 
 1. **身份验证失败**：

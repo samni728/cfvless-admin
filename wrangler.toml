@@ -1,21 +1,8 @@
 name = "cfvless-admin"
 compatibility_date = "2024-01-01"
 
-# [pages_build] 部分是关键
-# 部署产物目录，只包含必要的文件
-[pages_build]
-# a directory of static assets to upload
-pages_build_output_dir = "./public"
-
 [vars]
 ENVIRONMENT = "production"
 
-# 请注意：绑定的定义方式在 Pages 项目中通常在 Cloudflare Dashboard 上完成。
-# 这个文件中的绑定部分主要是为了本地开发（wrangler dev）使用。
-# 对于 Action 部署，它最终会采用 Dashboard 上的绑定配置。
-[[d1_databases]]
-binding = "DB"
-database_name = "subscription-db"
-
-[[kv_namespaces]]
-binding = "subscription"
+# 注意：对于 Pages 项目，D1 和 KV 绑定通常在 Dashboard 中配置
+# 这里的配置主要用于本地开发

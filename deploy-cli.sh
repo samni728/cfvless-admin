@@ -31,10 +31,28 @@ else
     echo "✅ Wrangler 已安装: $(wrangler --version)"
 fi
 
-# 验证身份（不需要 wrangler login）
-echo "🔐 验证 Cloudflare 身份..."
+# 验证身份和权限
+echo "🔐 验证 Cloudflare 身份和权限..."
 if wrangler whoami; then
     echo "✅ 身份验证成功"
+    
+    # 检查 Pages 权限
+    echo "🔍 检查 Pages 权限..."
+    if wrangler pages project list > /dev/null 2>&1; then
+        echo "✅ Pages 权限正常"
+    else
+        echo "❌ Pages 权限不足！"
+        echo "请确保 API Token 包含以下权限："
+        echo "  - Account:Read"
+        echo "  - User:Read (重要！)"
+        echo "  - Cloudflare Pages:Edit"
+        echo "  - Workers Scripts:Edit"
+        echo "  - Workers KV Storage:Edit"
+        echo "  - D1:Edit"
+        echo ""
+        echo "前往创建新 Token: https://dash.cloudflare.com/profile/api-tokens"
+        exit 1
+    fi
 else
     echo "❌ 身份验证失败，请检查 API Token"
     exit 1
@@ -93,15 +111,42 @@ ls -la public/
 
 # 部署到 Cloudflare Pages
 echo "🚀 部署到 Cloudflare Pages..."
-wrangler pages deploy ./public \
-    --project-name=cfvless-admin \
-    --commit-dirty=true
 
-if [ $? -eq 0 ]; then
+# 检查项目是否存在，不存在则创建
+PROJECT_NAME="cfvless-admin"
+echo "🔍 检查项目是否存在..."
+if ! wrangler pages project list | grep -q "$PROJECT_NAME"; then
+    echo "📋 项目不存在，创建新项目..."
+    if wrangler pages project create "$PROJECT_NAME" --production-branch=main; then
+        echo "✅ 项目创建成功"
+    else
+        echo "❌ 项目创建失败"
+        exit 1
+    fi
+else
+    echo "✅ 项目已存在"
+fi
+
+# 部署代码
+echo "🚀 开始部署..."
+if wrangler pages deploy ./public \
+    --project-name="$PROJECT_NAME" \
+    --commit-dirty=true \
+    --compatibility-date=2024-01-01; then
+    
     echo "✅ 部署成功！"
-    echo "🔗 访问地址: https://cfvless-admin.pages.dev"
+    echo "🔗 访问地址: https://$PROJECT_NAME.pages.dev"
+    echo ""
+    echo "📋 重要提醒："
+    echo "如果这是首次部署，请在 Cloudflare Dashboard 中绑定 D1 和 KV 资源："
+    echo "1. 进入 Workers 和 Pages → Pages → $PROJECT_NAME"
+    echo "2. 设置 → 函数"
+    echo "3. 添加 D1 绑定：变量名=DB, 数据库=subscription-db"
+    echo "4. 添加 KV 绑定：变量名=subscription, 命名空间=subscription"
+    echo "5. 保存后会自动重新部署"
 else
     echo "❌ 部署失败"
+    echo "请检查 API Token 权限或网络连接"
     exit 1
 fi
 
