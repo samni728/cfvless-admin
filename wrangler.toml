@@ -1,17 +1,21 @@
-name = "subscription-manager"
-main = "_worker.js"
+name = "cfvless-admin"
 compatibility_date = "2024-01-01"
-compatibility_flags = ["nodejs_compat"]
 
-# Workers 发布所需的最小绑定骨架；id 留空，Actions 会在首次创建后写入临时配置
-[[d1_databases]]
-binding = "DB"
-database_name = "subscription-db"
-# database_id 可留空；Actions 首次创建后会写入临时 merged 配置再发布
-
-[[kv_namespaces]]
-binding = "subscription"
-# id 留空；Actions 首次创建后会写入临时 merged 配置再发布
+# [pages_build] 部分是关键
+# 由于我们没有构建步骤，静态文件就在根目录
+[pages_build]
+# a directory of static assets to upload
+pages_build_output_dir = "./"
 
 [vars]
 ENVIRONMENT = "production"
+
+# 请注意：绑定的定义方式在 Pages 项目中通常在 Cloudflare Dashboard 上完成。
+# 这个文件中的绑定部分主要是为了本地开发（wrangler dev）使用。
+# 对于 Action 部署，它最终会采用 Dashboard 上的绑定配置。
+[[d1_databases]]
+binding = "DB"
+database_name = "subscription-db"
+
+[[kv_namespaces]]
+binding = "subscription"

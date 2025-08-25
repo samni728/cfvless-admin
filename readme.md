@@ -215,6 +215,11 @@ chmod +x deploy-simple.sh
    - 进入 GitHub Actions 查看具体错误信息
    - 检查 Cloudflare Dashboard 中的资源创建情况
 
+4. **项目不存在错误**：
+   - 如果遇到 "Project not found" 错误
+   - 请参考 `DEPLOYMENT_FIX_GUIDE.md` 获取详细解决方案
+   - 推荐先在 Cloudflare Dashboard 手动创建项目
+
 ### 🔧 故障排除
 
 #### 404 错误解决方案

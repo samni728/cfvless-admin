@@ -85,10 +85,17 @@ jobs:
         run: |
           echo "🚀 部署到 Cloudflare Pages..."
           
-          # 直接使用 Pages 部署，不修改 wrangler.toml
-          wrangler pages deploy . \
-            --project-name="${PROJECT_NAME}" \
-            --commit-dirty=true
+          # 尝试部署，如果项目不存在则创建
+          if ! wrangler pages deploy . --project-name="${PROJECT_NAME}" --commit-dirty=true; then
+            echo "📋 项目不存在，尝试创建新项目..."
+            
+            # 创建新的 Pages 项目
+            wrangler pages project create "${PROJECT_NAME}" --production-branch=main
+            
+            # 重新尝试部署
+            echo "🔄 重新部署到新创建的项目..."
+            wrangler pages deploy . --project-name="${PROJECT_NAME}" --commit-dirty=true
+          fi
           
           echo "✅ 部署完成！"
           echo "🔗 访问地址: https://${PROJECT_NAME}.pages.dev"
