@@ -32,13 +32,37 @@ cfvless-admin/
 
 ### 一键部署（推荐）
 
+#### 方式一：GitHub 集成部署（推荐）
+
 [![Deploy to Cloudflare Pages](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Pages-blue?style=for-the-badge&logo=cloudflare)](https://dash.cloudflare.com/?to=/:account/pages/new/create)
 
-**点击上方按钮，然后：**
+**部署步骤：**
+1. 点击上方按钮进入 Cloudflare Pages
+2. 选择 **Connect to Git**
+3. 选择 **GitHub** 并授权
+4. 选择仓库 `samni728/cfvless-admin`
+5. 配置构建设置：
+   - **Framework preset**: None
+   - **Build command**: 留空
+   - **Build output directory**: 留空
+6. 点击 **Save and Deploy**
 
-1. 选择 **直接上传** 方式
-2. 上传项目文件（`_worker.js`、`index.html`、`data.js`）
-3. 按照下方配置步骤设置数据库和绑定
+#### 方式二：直接上传部署
+
+如果 GitHub 集成遇到问题，可以使用直接上传：
+
+1. 访问 [Cloudflare Pages](https://dash.cloudflare.com/?to=/:account/pages/new/create)
+2. 选择 **Direct Upload**
+3. 下载项目文件：
+   ```bash
+   git clone https://github.com/samni728/cfvless-admin.git
+   ```
+4. 上传以下文件：
+   - `_worker.js`
+   - `index.html` 
+   - `data.js`
+   - `wrangler.toml`
+5. 点击 **Deploy site**
 
 ### 命令行部署
 
@@ -63,6 +87,35 @@ chmod +x deploy-simple.sh
 
 1. 在 GitHub 仓库设置中添加 `CLOUDFLARE_API_TOKEN` 密钥
 2. 推送代码到 `main` 分支即可自动部署
+
+### 🔧 故障排除
+
+#### 404 错误解决方案
+
+如果点击部署按钮后出现 404 错误：
+
+1. **直接访问 Cloudflare Pages**：
+   - 手动访问：https://dash.cloudflare.com/
+   - 进入 **Workers 和 Pages** → **Pages**
+   - 点击 **创建应用程序**
+
+2. **检查账户权限**：
+   - 确保已登录 Cloudflare 账户
+   - 确保账户有 Pages 访问权限
+
+3. **使用备用链接**：
+   - 直接访问：https://dash.cloudflare.com/?to=/:account/pages/new/create
+   - 或者：https://dash.cloudflare.com/?to=/:account/pages
+
+#### 部署后配置
+
+部署成功后，还需要：
+
+1. **创建 D1 数据库**（必需）
+2. **创建 KV 命名空间**（必需）
+3. **配置绑定**（必需）
+
+详细步骤请参考下方的"手动部署"部分。
 
 ### 手动部署
 
