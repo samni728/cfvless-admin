@@ -24,55 +24,63 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run Wrangler commands
-        uses: cloudflare/wrangler-action@v3
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: |
-            set -euo pipefail
+          node-version: '20'
 
-            echo "==> Wrangler version"
-            wrangler --version
+      - name: Install Wrangler
+        run: npm i -g wrangler@3
+
+      - name: Run Wrangler commands
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+
+          echo "==> Wrangler version"
+          wrangler --version
 
             KV_BINDING="${{ inputs.kv_binding }}"
             D1_NAME="${{ inputs.d1_name }}"
 
-            echo "==> Ensure KV namespace (${KV_BINDING})"
+          echo "==> Ensure KV namespace (${KV_BINDING})"
             # Try to find existing KV namespace id by binding name (best-effort)
             KV_ID=""
-            if wrangler kv namespace list --output json >/tmp/kv_list.json 2>/dev/null; then
+            if wrangler kv namespace list --output json --account-id "${CLOUDFLARE_ACCOUNT_ID}" >/tmp/kv_list.json 2>/dev/null; then
               KV_ID=$(node -e "const l=require('fs').readFileSync('/tmp/kv_list.json','utf8'); try{const a=JSON.parse(l); const m=a.find(x=>x.title&&x.title.endsWith(': '+process.env.KV_BINDING)); if(m) process.stdout.write(m.id);}" || true)
             fi
             if [ -z "${KV_ID}" ]; then
               # Create if missing
               # Some wrangler versions support --output json
               echo "Creating KV namespace..."
-              wrangler kv namespace create ${KV_BINDING} >/tmp/kv_create.txt 2>&1 || true
+              wrangler kv namespace create ${KV_BINDING} --account-id "${CLOUDFLARE_ACCOUNT_ID}" >/tmp/kv_create.txt 2>&1 || true
               KV_ID=$(grep -Eo 'id\s*=\s*"[a-f0-9]{32}"' /tmp/kv_create.txt | head -1 | sed -E 's/.*"(.*)"/\1/' || true)
             fi
             echo "KV_ID=${KV_ID}"
 
-            echo "==> Ensure D1 database (${D1_NAME})"
+          echo "==> Ensure D1 database (${D1_NAME})"
             D1_ID=""
-            if wrangler d1 list --output json >/tmp/d1_list.json 2>/dev/null; then
+            if wrangler d1 list --output json --account-id "${CLOUDFLARE_ACCOUNT_ID}" >/tmp/d1_list.json 2>/dev/null; then
               D1_ID=$(node -e "const l=require('fs').readFileSync('/tmp/d1_list.json','utf8'); try{const a=JSON.parse(l); const m=a.find(x=>x.name===process.env.D1_NAME); if(m) process.stdout.write(m.uuid||m.id||'');}" || true)
             fi
             if [ -z "${D1_ID}" ]; then
               echo "Creating D1 database..."
-              wrangler d1 create ${D1_NAME} >/tmp/d1_create.txt 2>&1 || true
+              wrangler d1 create ${D1_NAME} --account-id "${CLOUDFLARE_ACCOUNT_ID}" >/tmp/d1_create.txt 2>&1 || true
               D1_ID=$(grep -Eo 'uuid\s*:\s*[a-f0-9-]+' /tmp/d1_create.txt | head -1 | awk '{print $2}' || true)
               if [ -z "${D1_ID}" ]; then
                 # Fallback parse json
-                if wrangler d1 list --output json >/tmp/d1_list2.json 2>/dev/null; then
+                if wrangler d1 list --output json --account-id "${CLOUDFLARE_ACCOUNT_ID}" >/tmp/d1_list2.json 2>/dev/null; then
                   D1_ID=$(node -e "const l=require('fs').readFileSync('/tmp/d1_list2.json','utf8'); try{const a=JSON.parse(l); const m=a.find(x=>x.name===process.env.D1_NAME); if(m) process.stdout.write(m.uuid||m.id||'');}" || true)
                 fi
               fi
             fi
             echo "D1_ID=${D1_ID}"
 
-            echo "==> Prepare temporary wrangler config"
-            cp wrangler.toml wrangler.merged.toml
+          echo "==> Prepare temporary wrangler config"
+          cp wrangler.toml wrangler.merged.toml
 
             # Replace database_name and database_id in wrangler.merged.toml
             if grep -q '^\s*database_name\s*=\s*"' wrangler.merged.toml; then
@@ -113,11 +121,11 @@ jobs:
               fi
             fi
 
-            echo "==> Show effective wrangler config"
-            sed -e 's/\("database_id"\s*=\s*\)"[^"]*"/\1"***"/' -e 's/\("id"\s*=\s*\)"[^"]*"/\1"***"/' wrangler.merged.toml | sed -n '1,120p'
+          echo "==> Show effective wrangler config"
+          sed -e 's/\("database_id"\s*=\s*\)"[^"]*"/\1"***"/' -e 's/\("id"\s*=\s*\)"[^"]*"/\1"***"/' wrangler.merged.toml | sed -n '1,120p'
 
-            echo "==> Apply D1 migrations (if any)"
-            wrangler d1 migrations apply ${D1_NAME} || true
+          echo "==> Apply D1 migrations (if any)"
+          wrangler d1 migrations apply ${D1_NAME} --account-id "${CLOUDFLARE_ACCOUNT_ID}" || true
 
-            echo "==> Publish Worker with merged config"
-            wrangler publish --config wrangler.merged.toml
+          echo "==> Publish Worker with merged config"
+          wrangler publish --config wrangler.merged.toml --account-id "${CLOUDFLARE_ACCOUNT_ID}"
