@@ -1,9 +1,21 @@
 name: Deploy to Cloudflare Pages (Optimized)
 
 on:
-  push:
-    branches: [main]
-  workflow_dispatch: # 允许手动触发
+  # 手动触发（推荐）
+  workflow_dispatch:
+    inputs:
+      deploy_reason:
+        description: '部署原因'
+        required: false
+        default: '手动部署'
+  
+  # 可选：只在特定情况下自动触发
+  # push:
+  #   branches: [main]
+  #   paths:
+  #     - '_worker.js'
+  #     - 'index.html'
+  #     - 'data.js'
 
 jobs:
   deploy:
