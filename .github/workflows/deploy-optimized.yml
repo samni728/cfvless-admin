@@ -1,0 +1,211 @@
+name: Deploy to Cloudflare (Optimized)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      project_name:
+        description: "项目名称"
+        required: true
+        default: "cfvless-admin"
+      d1_name:
+        description: "D1 数据库名"
+        required: true
+        default: "subscription-db"
+      kv_binding:
+        description: "KV 绑定名"
+        required: true
+        default: "subscription"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Wrangler
+        run: npm install -g wrangler@latest
+
+      - name: Validate Environment
+        run: |
+          echo "🔍 验证环境配置..."
+          
+          # 检查必需的密钥
+          if [ -z "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
+            echo "❌ CLOUDFLARE_API_TOKEN 未设置"
+            echo "请在 GitHub 仓库设置中添加 CLOUDFLARE_API_TOKEN 密钥"
+            exit 1
+          fi
+          
+          if [ -z "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ]; then
+            echo "❌ CLOUDFLARE_ACCOUNT_ID 未设置"
+            echo "请在 GitHub 仓库设置中添加 CLOUDFLARE_ACCOUNT_ID 密钥"
+            exit 1
+          fi
+          
+          echo "✅ 环境配置验证通过"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Setup Infrastructure
+        run: |
+          set -euo pipefail
+          
+          # 设置变量
+          PROJECT_NAME="${{ github.event.inputs.project_name || 'cfvless-admin' }}"
+          D1_NAME="${{ github.event.inputs.d1_name || 'subscription-db' }}"
+          KV_BINDING="${{ github.event.inputs.kv_binding || 'subscription' }}"
+          
+          echo "📋 项目配置:"
+          echo "  项目名称: ${PROJECT_NAME}"
+          echo "  D1 数据库: ${D1_NAME}"
+          echo "  KV 绑定: ${KV_BINDING}"
+          
+          echo "==> 检查 Wrangler 版本"
+          wrangler --version
+          
+          # 确保 KV 命名空间存在
+          echo "==> 设置 KV 命名空间 (${KV_BINDING})"
+          KV_ID=""
+          if wrangler kv namespace list --output json >/tmp/kv_list.json 2>/dev/null; then
+            KV_ID=$(node -e "
+              const fs = require('fs');
+              try {
+                const data = JSON.parse(fs.readFileSync('/tmp/kv_list.json', 'utf8'));
+                const namespace = data.find(x => x.title && x.title.endsWith(': ${KV_BINDING}'));
+                if (namespace) process.stdout.write(namespace.id);
+              } catch(e) {}
+            " || true)
+          fi
+          
+          if [ -z "${KV_ID}" ]; then
+            echo "创建新的 KV 命名空间..."
+            wrangler kv namespace create ${KV_BINDING} >/tmp/kv_create.txt 2>&1 || true
+            KV_ID=$(grep -Eo 'id\s*=\s*"[a-f0-9]{32}"' /tmp/kv_create.txt | head -1 | sed -E 's/.*"(.*)"/\1/' || true)
+          fi
+          echo "KV_ID=${KV_ID}"
+          
+          # 确保 D1 数据库存在
+          echo "==> 设置 D1 数据库 (${D1_NAME})"
+          D1_ID=""
+          if wrangler d1 list --output json >/tmp/d1_list.json 2>/dev/null; then
+            D1_ID=$(node -e "
+              const fs = require('fs');
+              try {
+                const data = JSON.parse(fs.readFileSync('/tmp/d1_list.json', 'utf8'));
+                const db = data.find(x => x.name === '${D1_NAME}');
+                if (db) process.stdout.write(db.uuid || db.id || '');
+              } catch(e) {}
+            " || true)
+          fi
+          
+          if [ -z "${D1_ID}" ]; then
+            echo "创建新的 D1 数据库..."
+            wrangler d1 create ${D1_NAME} >/tmp/d1_create.txt 2>&1 || true
+            D1_ID=$(grep -Eo 'uuid\s*:\s*[a-f0-9-]+' /tmp/d1_create.txt | head -1 | awk '{print $2}' || true)
+            
+            # 重新获取 ID 如果解析失败
+            if [ -z "${D1_ID}" ]; then
+              sleep 2
+              if wrangler d1 list --output json >/tmp/d1_list2.json 2>/dev/null; then
+                D1_ID=$(node -e "
+                  const fs = require('fs');
+                  try {
+                    const data = JSON.parse(fs.readFileSync('/tmp/d1_list2.json', 'utf8'));
+                    const db = data.find(x => x.name === '${D1_NAME}');
+                    if (db) process.stdout.write(db.uuid || db.id || '');
+                  } catch(e) {}
+                " || true)
+              fi
+            fi
+          fi
+          echo "D1_ID=${D1_ID}"
+          
+          # 创建临时配置文件
+          echo "==> 准备部署配置"
+          cp wrangler.toml wrangler.deploy.toml
+          
+          # 更新 D1 配置
+          if [ -n "${D1_ID}" ]; then
+            if grep -q '^database_id\s*=' wrangler.deploy.toml; then
+              sed -i.bak "s/^database_id\s*=.*/database_id = \"${D1_ID}\"/" wrangler.deploy.toml
+            else
+              # 在 [[d1_databases]] 部分后添加 database_id
+              awk -v id="${D1_ID}" '
+                /^\[\[d1_databases\]\]/ { print; print "database_id = \"" id "\""; next }
+                { print }
+              ' wrangler.deploy.toml > wrangler.tmp && mv wrangler.tmp wrangler.deploy.toml
+            fi
+          fi
+          
+          # 更新 KV 配置
+          if [ -n "${KV_ID}" ]; then
+            if grep -q '^id\s*=' wrangler.deploy.toml; then
+              sed -i.bak "0,/^id\s*=/s//id = \"${KV_ID}\"/" wrangler.deploy.toml
+            else
+              # 在 [[kv_namespaces]] 部分后添加 id
+              awk -v id="${KV_ID}" '
+                /^\[\[kv_namespaces\]\]/ { print; print "id = \"" id "\""; next }
+                { print }
+              ' wrangler.deploy.toml > wrangler.tmp && mv wrangler.tmp wrangler.deploy.toml
+            fi
+          fi
+          
+          echo "==> 最终配置预览"
+          cat wrangler.deploy.toml
+          
+          # 初始化数据库
+          if [ -f "d1_init.sql" ] && [ -n "${D1_ID}" ]; then
+            echo "==> 初始化数据库表结构"
+            wrangler d1 migrations apply ${D1_NAME} --remote || true
+            # 如果没有 migrations，直接执行 SQL
+            wrangler d1 execute ${D1_NAME} --remote --file=d1_init.sql || true
+          fi
+          
+          # 保存变量供后续步骤使用
+          echo "PROJECT_NAME=${PROJECT_NAME}" >> $GITHUB_ENV
+          echo "D1_NAME=${D1_NAME}" >> $GITHUB_ENV
+          echo "KV_BINDING=${KV_BINDING}" >> $GITHUB_ENV
+          
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Deploy to Cloudflare Pages
+        run: |
+          echo "🚀 部署到 Cloudflare Pages..."
+          
+          # 使用 Pages 部署
+          wrangler pages deploy . \
+            --project-name="${PROJECT_NAME}" \
+            --config=wrangler.deploy.toml \
+            --commit-dirty=true
+          
+          echo "✅ 部署完成！"
+          echo ""
+          echo "📋 部署信息:"
+          echo "  项目名称: ${PROJECT_NAME}"
+          echo "  D1 数据库: ${D1_NAME}"
+          echo "  KV 命名空间: ${KV_BINDING}"
+          echo ""
+          echo "🔗 访问地址: https://${PROJECT_NAME}.pages.dev"
+          
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Cleanup
+        if: always()
+        run: |
+          # 清理临时文件
+          rm -f wrangler.deploy.toml wrangler.deploy.toml.bak wrangler.tmp
+          rm -f /tmp/kv_*.json /tmp/d1_*.json /tmp/kv_create.txt /tmp/d1_create.txt

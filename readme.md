@@ -165,7 +165,7 @@ chmod +x deploy-simple.sh
 
 4. **添加 Account ID 密钥**
    - 再次点击 **New repository secret**
-   - **Name**: `CLOUDflare_ACCOUNT_ID`
+   - **Name**: `CLOUDFLARE_ACCOUNT_ID`
    - **Value**: 粘贴您的 Account ID（从 Cloudflare Dashboard 右侧边栏获取）
    - 点击 **Add secret**
 
@@ -173,7 +173,7 @@ chmod +x deploy-simple.sh
 
 1. **检查密钥是否添加成功**
 
-   - 在 Secrets 列表中应该看到 `CLOUDFLARE_API_TOKEN` 和 `CLOUDflare_ACCOUNT_ID`
+   - 在 Secrets 列表中应该看到 `CLOUDFLARE_API_TOKEN` 和 `CLOUDFLARE_ACCOUNT_ID`
    - 密钥值会显示为 `***`（隐藏保护）
 
 2. **触发部署**
@@ -183,18 +183,37 @@ chmod +x deploy-simple.sh
 **⚠️ 重要提醒**：
 
 - API Token 只显示一次，请妥善保存
-- 密钥名称必须完全一致：`CLOUDFLARE_API_TOKEN` 和 `CLOUDflare_ACCOUNT_ID`
+- 密钥名称必须完全一致：`CLOUDFLARE_API_TOKEN` 和 `CLOUDFLARE_ACCOUNT_ID`
 - 如果 Token 泄露，请立即在 Cloudflare 中删除并重新创建
 
-4. **推送代码**：推送代码到 `main` 分支即可自动部署
+##### 步骤 4：部署方式
+
+**方式一：自动部署（推荐）**
+- 推送代码到 `main` 分支即可自动部署
+- GitHub Actions 会自动创建 D1 数据库、KV 命名空间并部署
+
+**方式二：手动部署**
+- 进入 GitHub 仓库的 **Actions** 标签
+- 选择 **Deploy to Cloudflare (Optimized)** 工作流
+- 点击 **Run workflow** 按钮
+- 可以自定义项目名称、数据库名等参数
 
 #### 故障排除：
 
 如果部署失败，请检查：
 
-- API Token 权限是否正确（需要 Cloudflare Pages:Edit 权限）
-- 项目名称是否已存在（如果存在，请先删除或使用不同名称）
-- GitHub Actions 是否已启用
+1. **密钥配置**：
+   - `CLOUDFLARE_API_TOKEN` 是否正确设置
+   - `CLOUDFLARE_ACCOUNT_ID` 是否正确设置
+   - API Token 权限是否包含：Workers Scripts:Edit, Workers KV Storage:Edit, D1:Edit, Cloudflare Pages:Edit
+
+2. **项目配置**：
+   - 项目名称是否已存在（如果存在，请使用不同名称或删除现有项目）
+   - GitHub Actions 是否已启用
+
+3. **查看详细日志**：
+   - 进入 GitHub Actions 查看具体错误信息
+   - 检查 Cloudflare Dashboard 中的资源创建情况
 
 ### 🔧 故障排除
 
