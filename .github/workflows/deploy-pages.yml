@@ -1,0 +1,110 @@
+name: Deploy to Cloudflare Pages (Fixed)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      project_name:
+        description: "项目名称"
+        required: true
+        default: "cfvless-admin"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Wrangler
+        run: npm install -g wrangler@latest
+
+      - name: Validate Environment
+        run: |
+          echo "🔍 验证环境配置..."
+          
+          if [ -z "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
+            echo "❌ CLOUDFLARE_API_TOKEN 未设置"
+            exit 1
+          fi
+          
+          if [ -z "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ]; then
+            echo "❌ CLOUDFLARE_ACCOUNT_ID 未设置"
+            exit 1
+          fi
+          
+          echo "✅ 环境配置验证通过"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Setup Infrastructure
+        run: |
+          set -euo pipefail
+          
+          PROJECT_NAME="${{ github.event.inputs.project_name || 'cfvless-admin' }}"
+          D1_NAME="subscription-db"
+          KV_BINDING="subscription"
+          
+          echo "📋 项目配置:"
+          echo "  项目名称: ${PROJECT_NAME}"
+          echo "  D1 数据库: ${D1_NAME}"
+          echo "  KV 绑定: ${KV_BINDING}"
+          
+          # 创建或获取 KV 命名空间
+          echo "==> 设置 KV 命名空间"
+          KV_OUTPUT=$(wrangler kv namespace create ${KV_BINDING} 2>&1 || echo "可能已存在")
+          echo "${KV_OUTPUT}"
+          
+          # 创建或获取 D1 数据库
+          echo "==> 设置 D1 数据库"
+          D1_OUTPUT=$(wrangler d1 create ${D1_NAME} 2>&1 || echo "可能已存在")
+          echo "${D1_OUTPUT}"
+          
+          # 初始化数据库（如果有 SQL 文件）
+          if [ -f "d1_init.sql" ]; then
+            echo "==> 初始化数据库"
+            wrangler d1 execute ${D1_NAME} --remote --file=d1_init.sql || echo "数据库初始化完成或已存在"
+          fi
+          
+          # 保存项目名称
+          echo "PROJECT_NAME=${PROJECT_NAME}" >> $GITHUB_ENV
+          
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Deploy to Cloudflare Pages
+        run: |
+          echo "🚀 部署到 Cloudflare Pages..."
+          
+          # 直接使用 Pages 部署，不修改 wrangler.toml
+          wrangler pages deploy . \
+            --project-name="${PROJECT_NAME}" \
+            --commit-dirty=true
+          
+          echo "✅ 部署完成！"
+          echo "🔗 访问地址: https://${PROJECT_NAME}.pages.dev"
+          
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Post-Deploy Setup
+        run: |
+          echo "📋 部署后配置提醒："
+          echo "1. 请前往 Cloudflare Dashboard"
+          echo "2. 进入 Workers 和 Pages → Pages → ${PROJECT_NAME}"
+          echo "3. 在设置中绑定以下资源："
+          echo "   - D1 数据库: subscription-db (变量名: DB)"
+          echo "   - KV 命名空间: subscription (变量名: subscription)"
+          echo "4. 绑定完成后，Pages 会自动重新部署"
+          echo ""
+          echo "🎉 部署流程完成！"

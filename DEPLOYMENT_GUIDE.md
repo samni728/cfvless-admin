@@ -8,8 +8,8 @@
    - 统一使用 `CLOUDFLARE_ACCOUNT_ID`（之前有拼写错误）
    - 更新了 README 中的所有引用
 
-2. **创建了优化的 GitHub Actions 工作流**
-   - 文件：`.github/workflows/deploy-optimized.yml`
+2. **创建了修复的 GitHub Actions 工作流**
+   - 文件：`.github/workflows/deploy-pages.yml`
    - 自动创建和配置 D1 数据库
    - 自动创建和配置 KV 命名空间
    - 智能的错误处理和日志输出

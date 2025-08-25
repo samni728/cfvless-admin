@@ -184,10 +184,12 @@ jobs:
         run: |
           echo "🚀 部署到 Cloudflare Pages..."
           
+          # 替换原始配置文件，因为 Pages 不支持自定义配置文件路径
+          cp wrangler.deploy.toml wrangler.toml
+          
           # 使用 Pages 部署
           wrangler pages deploy . \
             --project-name="${PROJECT_NAME}" \
-            --config=wrangler.deploy.toml \
             --commit-dirty=true
           
           echo "✅ 部署完成！"
@@ -206,6 +208,9 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
+          # 恢复原始配置文件
+          git checkout wrangler.toml 2>/dev/null || true
+          
           # 清理临时文件
           rm -f wrangler.deploy.toml wrangler.deploy.toml.bak wrangler.tmp
           rm -f /tmp/kv_*.json /tmp/d1_*.json /tmp/kv_create.txt /tmp/d1_create.txt

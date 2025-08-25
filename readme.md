@@ -194,9 +194,9 @@ chmod +x deploy-simple.sh
 
 **方式二：手动部署**
 - 进入 GitHub 仓库的 **Actions** 标签
-- 选择 **Deploy to Cloudflare (Optimized)** 工作流
+- 选择 **Deploy to Cloudflare Pages (Fixed)** 工作流
 - 点击 **Run workflow** 按钮
-- 可以自定义项目名称、数据库名等参数
+- 可以自定义项目名称等参数
 
 #### 故障排除：
 
