@@ -49,6 +49,7 @@ cfvless-admin/
 6. 点击 **Save and Deploy**
 
 **⚠️ 重要提醒：**
+
 - GitHub 集成部署**不会自动创建** D1 数据库和 KV 命名空间
 - 部署成功后，您需要**手动创建**这些资源
 - 详细步骤请参考下方的"部署后配置"部分
@@ -91,8 +92,32 @@ chmod +x deploy-simple.sh
 
 如果项目托管在 GitHub 上，可以设置自动部署：
 
-1. 在 GitHub 仓库设置中添加 `CLOUDFLARE_API_TOKEN` 密钥
-2. 推送代码到 `main` 分支即可自动部署
+#### 设置步骤：
+
+1. **获取 Cloudflare API Token**：
+   - 访问 [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens)
+   - 创建新的 API Token，权限选择：
+     - Account: Cloudflare Pages:Edit
+     - Zone: 选择您的域名（如果有）
+
+2. **获取 Account ID**：
+   - 访问 [Cloudflare Dashboard](https://dash.cloudflare.com/)
+   - 在右侧边栏找到您的 Account ID
+
+3. **在 GitHub 仓库设置中添加密钥**：
+   - 进入 GitHub 仓库 → Settings → Secrets and variables → Actions
+   - 添加以下密钥：
+     - `CLOUDFLARE_API_TOKEN`: 您的 Cloudflare API Token
+     - `CLOUDflare_ACCOUNT_ID`: 您的 Cloudflare Account ID
+
+4. **推送代码**：推送代码到 `main` 分支即可自动部署
+
+#### 故障排除：
+
+如果部署失败，请检查：
+- API Token 权限是否正确
+- Account ID 是否正确
+- 项目名称是否已存在（如果存在，请先删除或使用不同名称）
 
 ### 🔧 故障排除
 
@@ -120,17 +145,20 @@ chmod +x deploy-simple.sh
 **无论使用哪种部署方式，部署成功后都需要手动配置以下资源：**
 
 ##### 1. 创建 D1 数据库
+
 1. 访问 [Cloudflare D1](https://dash.cloudflare.com/?to=/:account/workers/d1)
 2. 点击 **创建数据库**
 3. 输入数据库名称：`cfvless-db`
 4. 创建后，在数据库控制台执行 `d1_init.sql` 中的 SQL 语句
 
 ##### 2. 创建 KV 命名空间
+
 1. 访问 [Cloudflare KV](https://dash.cloudflare.com/?to=/:account/workers/kv)
 2. 点击 **创建命名空间**
 3. 输入名称：`user-sessions`
 
 ##### 3. 配置绑定
+
 1. 进入您的 Pages 项目设置
 2. 点击 **函数 (Functions)** 标签
 3. 在 **绑定** 部分添加：
