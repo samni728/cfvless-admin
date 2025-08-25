@@ -148,16 +148,22 @@ chmod +x deploy-simple.sh
    - 左侧菜单选择 **Secrets and variables** → **Actions**
    - 点击 **New repository secret**
 
-3. **设置密钥**
+3. **设置 API Token 密钥**
    - **Name**: `CLOUDFLARE_API_TOKEN`
    - **Value**: 粘贴刚才复制的 Cloudflare API Token
+   - 点击 **Add secret**
+
+4. **添加 Account ID 密钥**
+   - 再次点击 **New repository secret**
+   - **Name**: `CLOUDflare_ACCOUNT_ID`
+   - **Value**: 粘贴您的 Account ID（从 Cloudflare Dashboard 右侧边栏获取）
    - 点击 **Add secret**
 
 ##### 步骤 3：验证设置
 
 1. **检查密钥是否添加成功**
 
-   - 在 Secrets 列表中应该看到 `CLOUDFLARE_API_TOKEN`
+   - 在 Secrets 列表中应该看到 `CLOUDFLARE_API_TOKEN` 和 `CLOUDflare_ACCOUNT_ID`
    - 密钥值会显示为 `***`（隐藏保护）
 
 2. **触发部署**
@@ -167,7 +173,7 @@ chmod +x deploy-simple.sh
 **⚠️ 重要提醒**：
 
 - API Token 只显示一次，请妥善保存
-- 密钥名称必须完全一致：`CLOUDFLARE_API_TOKEN`
+- 密钥名称必须完全一致：`CLOUDFLARE_API_TOKEN` 和 `CLOUDflare_ACCOUNT_ID`
 - 如果 Token 泄露，请立即在 Cloudflare 中删除并重新创建
 
 4. **推送代码**：推送代码到 `main` 分支即可自动部署
