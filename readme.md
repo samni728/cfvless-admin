@@ -94,20 +94,59 @@ chmod +x deploy-simple.sh
 
 #### 设置步骤：
 
-1. **获取 Cloudflare API Token**：
+##### 步骤 1：获取 Cloudflare API Token
 
-   - 访问 [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens)
-   - 创建新的 API Token，权限选择：
-     - Account: Cloudflare Pages:Edit
-     - 如果需要，也可以选择 Zone 权限
+1. **登录 Cloudflare Dashboard**
+   - 访问：https://dash.cloudflare.com/
+   - 使用您的 Cloudflare 账户登录
 
-2. **在 GitHub 仓库设置中添加密钥**：
+2. **创建 API Token**
+   - 点击右上角头像 → **My Profile**
+   - 左侧菜单选择 **API Tokens**
+   - 点击 **Create Token**
 
-   - 进入 GitHub 仓库 → Settings → Secrets and variables → Actions
-   - 添加密钥：
-     - `CLOUDFLARE_API_TOKEN`: 您的 Cloudflare API Token
+3. **配置 Token 权限**
+   - 选择 **Custom token** 模板
+   - 设置 Token 名称：`GitHub Actions Deploy`
+   - 权限配置：
+     - **Account** → **Cloudflare Pages** → **Edit**
+     - 选择您的账户
+   - 点击 **Continue to summary**
 
-**注意**：只需要 API Token，不需要 Account ID
+4. **创建 Token**
+   - 确认权限设置
+   - 点击 **Create Token**
+   - **重要**：复制生成的 Token（只显示一次！）
+
+##### 步骤 2：在 GitHub 仓库中添加密钥
+
+1. **进入 GitHub 仓库设置**
+   - 访问您的 GitHub 仓库
+   - 点击 **Settings** 标签
+
+2. **添加仓库密钥**
+   - 左侧菜单选择 **Secrets and variables** → **Actions**
+   - 点击 **New repository secret**
+
+3. **设置密钥**
+   - **Name**: `CLOUDFLARE_API_TOKEN`
+   - **Value**: 粘贴刚才复制的 Cloudflare API Token
+   - 点击 **Add secret**
+
+##### 步骤 3：验证设置
+
+1. **检查密钥是否添加成功**
+   - 在 Secrets 列表中应该看到 `CLOUDFLARE_API_TOKEN`
+   - 密钥值会显示为 `***`（隐藏保护）
+
+2. **触发部署**
+   - 推送任何代码更改到 `main` 分支
+   - 或者手动触发 GitHub Actions
+
+**⚠️ 重要提醒**：
+- API Token 只显示一次，请妥善保存
+- 密钥名称必须完全一致：`CLOUDFLARE_API_TOKEN`
+- 如果 Token 泄露，请立即在 Cloudflare 中删除并重新创建
 
 4. **推送代码**：推送代码到 `main` 分支即可自动部署
 
