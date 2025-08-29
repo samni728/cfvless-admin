@@ -2302,12 +2302,47 @@ export default {
                 `删除操作：查找节点 ${trimmedUrl.substring(0, 50)}...`
               );
 
-              // 先使用URL直接匹配查找节点（避免hash问题）
-              const node = await env.DB.prepare(
+              // GitHub版本的正确做法：使用URL直接匹配查找节点
+              // 同时尝试原始URL和解码后的URL进行匹配（解决编码问题）
+              let node = await env.DB.prepare(
                 "SELECT id FROM node_pool WHERE user_id = ? AND node_url = ?"
               )
                 .bind(user.id, trimmedUrl)
                 .first();
+              
+              // 如果直接匹配失败，尝试解码后的URL匹配
+              if (!node) {
+                try {
+                  const decodedUrl = decodeURIComponent(trimmedUrl);
+                  if (decodedUrl !== trimmedUrl) {
+                    console.log(`尝试解码后的URL匹配: ${decodedUrl.substring(0, 100)}...`);
+                    node = await env.DB.prepare(
+                      "SELECT id FROM node_pool WHERE user_id = ? AND node_url = ?"
+                    )
+                      .bind(user.id, decodedUrl)
+                      .first();
+                  }
+                } catch (e) {
+                  console.log(`URL解码失败: ${e.message}`);
+                }
+              }
+              
+              // 如果解码匹配失败，尝试编码后的URL匹配
+              if (!node) {
+                try {
+                  const encodedUrl = encodeURIComponent(trimmedUrl);
+                  if (encodedUrl !== trimmedUrl) {
+                    console.log(`尝试编码后的URL匹配: ${encodedUrl.substring(0, 100)}...`);
+                    node = await env.DB.prepare(
+                      "SELECT id FROM node_pool WHERE user_id = ? AND node_url = ?"
+                    )
+                      .bind(user.id, encodedUrl)
+                      .first();
+                  }
+                } catch (e) {
+                  console.log(`URL编码失败: ${e.message}`);
+                }
+              }
 
               if (node) {
                 console.log(`找到节点，ID: ${node.id}`);
