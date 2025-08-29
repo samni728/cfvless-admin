@@ -6,6 +6,18 @@
 import { connect } from "cloudflare:sockets";
 
 // =================================================================================
+// 用户配置区域 - 可直接修改
+// =================================================================================
+
+// ProxyIP 配置 - 用户可以修改为自己的 ProxyIP 地址
+const DEFAULT_PROXY_IP = '129.159.84.71';
+
+// 如果需要多个 ProxyIP，用逗号分隔，例如：
+// const DEFAULT_PROXY_IP = '129.159.84.71,your.second.proxy.ip';
+
+// =================================================================================
+
+// =================================================================================
 // 辅助函数和常量 - 必须在 export default 之前定义
 // =================================================================================
 
@@ -16,11 +28,22 @@ import { connect } from "cloudflare:sockets";
 const WS_READY_STATE_OPEN = 1;
 const WS_READY_STATE_CLOSING = 2;
 
-// VLESS WebSocket 处理函数
+// VLESS WebSocket 处理函数 - 基于 BPB 真实实现
 async function handleVlessWebSocket(request, env) {
   const webSocketPair = new WebSocketPair();
   const [client, webSocket] = Object.values(webSocketPair);
   webSocket.accept();
+
+  // BPB 风格的全局变量初始化 - 完全照搬 BPB 的 init.js
+  const url = new URL(request.url);
+  globalThis.pathName = url.pathname;
+  globalThis.hostName = request.headers.get('Host');
+  globalThis.urlOrigin = url.origin;
+  
+  // BPB 的 ProxyIP 初始化逻辑 - 使用顶部配置的 ProxyIP
+  globalThis.proxyIPs = DEFAULT_PROXY_IP;
+  
+  console.log(`BPB 风格初始化完成: pathName=${globalThis.pathName}, proxyIPs=${globalThis.proxyIPs}`);
 
   let address = "";
   let portWithRandomLog = "";
@@ -98,6 +121,8 @@ async function handleVlessWebSocket(request, env) {
             return;
           }
 
+          // 使用 BPB 风格的连接处理（包含 ProxyIP 重试机制）
+          log(`使用 BPB 风格连接处理: ${addressRemote}:${portRemote}`);
           handleTCPOutBound(
             remoteSocketWapper,
             addressRemote,
@@ -357,7 +382,10 @@ function stringify(arr, offset = 0) {
   return uuid;
 }
 
-// TCP 出站处理函数 - 支持 NAT64
+// BPB 风格：不需要复杂的 ProxyIP 检测逻辑
+// BPB 的实现更简单：直连失败时自动使用 ProxyIP 重试
+
+// BPB 风格的 TCP 出站处理函数 - 完全基于真实 BPB 源码
 async function handleTCPOutBound(
   remoteSocket,
   addressRemote,
@@ -367,71 +395,59 @@ async function handleTCPOutBound(
   vlessResponseHeader,
   log
 ) {
-  async function connectAndWrite(address, port, isIPv6 = false) {
-    let tcpSocket;
-    if (isIPv6) {
-      tcpSocket = connect({
-        hostname: address,
-        port: port,
-      });
-    } else {
-      tcpSocket = connect({
-        hostname: address,
-        port: port,
-      });
+  async function connectAndWrite(address, port) {
+    // BPB 的 IPv4 地址处理逻辑 - 完全照搬 BPB 源码
+    if (/^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?).){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(address)) {
+      address = `${atob('d3d3Lg==')}${address}${atob('LnNzbGlwLmlv')}`;
     }
+    
+    const tcpSocket = connect({
+      hostname: address,
+      port: port,
+    });
     remoteSocket.value = tcpSocket;
     log(`connected to ${address}:${port}`);
     const writer = tcpSocket.writable.getWriter();
-    await writer.write(rawClientData);
+    await writer.write(rawClientData); // first write, normal is tls client hello
     writer.releaseLock();
     return tcpSocket;
   }
 
+  // BPB 的 ProxyIP 重试逻辑 - 完全照搬 BPB 源码
   async function retry() {
-    try {
-      // NAT64 重试逻辑：如果直连失败，尝试通过 NAT64
-      log(`开始 NAT64 重试连接到 ${addressRemote}:${portRemote}`);
-
-      let nat64Address;
-      try {
-        // 尝试获取 IPv6 代理地址
-        nat64Address = await getIPv6ProxyAddress(addressRemote);
-        log(`NAT64 地址转换成功: ${addressRemote} -> ${nat64Address}`);
-      } catch (error) {
-        log(`NAT64 地址转换失败: ${error.message}`);
-        // 如果 DNS 解析失败，使用默认的 NAT64 转换
-        if (isIPv4(addressRemote)) {
-          nat64Address = convertToNAT64IPv6(addressRemote);
-          log(`使用默认 NAT64 转换: ${addressRemote} -> ${nat64Address}`);
-        } else {
-          throw new Error(`无法为 ${addressRemote} 创建 NAT64 地址`);
-        }
-      }
-
-      const tcpSocket = await connectAndWrite(nat64Address, portRemote, true);
-      tcpSocket.closed
-        .catch((error) => {
-          console.log("NAT64 retry tcpSocket closed error", error);
-        })
-        .finally(() => {
-          safeCloseWebSocket(webSocket);
-        });
-      remoteSocketToWS(tcpSocket, webSocket, vlessResponseHeader, null, log);
-    } catch (error) {
-      log(`NAT64 重试也失败: ${error.message}`);
-      safeCloseWebSocket(webSocket);
+    let proxyIP, proxyIpPort;
+    const encodedPanelProxyIPs = globalThis.pathName.split('/')[2] || '';
+    const decodedProxyIPs = encodedPanelProxyIPs ? atob(encodedPanelProxyIPs) : globalThis.proxyIPs;
+    const proxyIpList = decodedProxyIPs.split(',').map(ip => ip.trim());
+    const selectedProxyIP = proxyIpList[Math.floor(Math.random() * proxyIpList.length)];
+    
+    if (selectedProxyIP.includes(']:')) {
+      const match = selectedProxyIP.match(/^(\[.*?\]):(\d+)$/);
+      proxyIP = match[1];
+      proxyIpPort = match[2];
+    } else {
+      [proxyIP, proxyIpPort] = selectedProxyIP.split(':');
     }
+
+    const tcpSocket = await connectAndWrite(proxyIP || addressRemote, +proxyIpPort || portRemote);
+    
+    // no matter retry success or not, close websocket
+    tcpSocket.closed
+      .catch((error) => {
+        console.log("retry tcpSocket closed error", error);
+      })
+      .finally(() => {
+        safeCloseWebSocket(webSocket);
+      });
+
+    remoteSocketToWS(tcpSocket, webSocket, vlessResponseHeader, null, log);
   }
 
-  try {
-    // 首先尝试直连
-    const tcpSocket = await connectAndWrite(addressRemote, portRemote);
-    remoteSocketToWS(tcpSocket, webSocket, vlessResponseHeader, retry, log);
-  } catch (error) {
-    log(`直连失败: ${error.message}，准备 NAT64 重试`);
-    await retry();
-  }
+  const tcpSocket = await connectAndWrite(addressRemote, portRemote);
+
+  // when remoteSocket is ready, pass to websocket
+  // remote--> ws
+  remoteSocketToWS(tcpSocket, webSocket, vlessResponseHeader, retry, log);
 }
 
 // 检查是否为 IPv4 地址
@@ -632,20 +648,62 @@ async function getIPv6ProxyAddress(domain) {
 
 // 删除重复的isIPv4函数定义 - 这个函数已经在前面定义过了
 
-// ProxyIP源节点生成函数
-function generateProxyIPSourceNode(userConfig) {
-  const proxyConfig = {
-    userID: userConfig.uuid || crypto.randomUUID(),
-    hostName: userConfig.domain || "your-worker.workers.dev",
-    proxyIP: userConfig.proxyIP || "",
-    proxyPort: userConfig.proxyPort || "443",
-  };
+// ProxyIP 源节点生成函数 - 完全基于 BPB 真实源码实现
+function generateProxyIPSourceNode(config_data) {
+  const {
+    uuid,
+    domain,
+    proxyIPs = [DEFAULT_PROXY_IP], // BPB 默认 ProxyIP 地址，在文件顶部配置
+    port = 443,
+    fingerprint = "randomized", // BPB 默认指纹
+    alpn = "http/1.1" // BPB 默认 ALPN
+  } = config_data;
 
-  // 生成ProxyIP增强的VLESS节点 - 参考 vlessnoproxyip.js 的格式
-  return `vless://${proxyConfig.userID}@${proxyConfig.hostName}:443?encryption=none&security=tls&type=ws&host=${proxyConfig.hostName}&path=%2F%3Fed%3D2560&sni=${proxyConfig.hostName}&fp=randomized#ProxyIP_${proxyConfig.hostName}`;
+  if (!uuid || !domain) {
+    throw new Error("UUID 和域名是必需的参数");
+  }
+
+  // BPB 的 getRandomPath 函数 - 完全照搬源码
+  function getRandomPath(length) {
+    let result = '';
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const charactersLength = characters.length;
+    for (let i = 0; i < length; i++) {
+      result += characters.charAt(Math.floor(Math.random() * charactersLength));
+    }
+    return result;
+  }
+
+  // BPB 的 buildConfig 函数逻辑 - 完全照搬 normalConfigs.js
+  const isTLS = port === 443 || port === 8443 || port === 2053 || port === 2083 || port === 2087 || port === 2096;
+  const security = isTLS ? 'tls' : 'none';
+  
+  // BPB 关键：路径生成逻辑
+  const path = `${getRandomPath(16)}${proxyIPs.length ? `/${btoa(proxyIPs.join(','))}` : ''}`;
+  
+  // 构建 VLESS 配置 URL - 完全按照 BPB 的 buildConfig 函数
+  const config = new URL(`vless://config`);
+  config.username = uuid;
+  config.hostname = domain;
+  config.port = port;
+  config.searchParams.append('encryption', 'none');
+  config.searchParams.append('host', domain); // BPB 使用 domain 作为 host
+  config.searchParams.append('type', 'ws');
+  config.searchParams.append('security', security);
+  config.searchParams.append('path', `/${path}?ed=2560`); // BPB 路径格式
+  
+  if (isTLS) {
+    config.searchParams.append('sni', domain); // BPB 使用 domain 作为 SNI
+    config.searchParams.append('fp', fingerprint);
+    config.searchParams.append('alpn', alpn);
+  }
+  
+  config.hash = `BPB-ProxyIP-${domain}`;
+  
+  console.log(`生成 BPB ProxyIP 节点: path=/${path}?ed=2560, proxyIPs=${proxyIPs.join(',')}`);
+  
+  return config.href;
 }
-
-// 删除重复的函数定义 - 这些函数已经在前面定义过了
 
 // 创建用户默认源节点配置 - 简化版本，只生成NAT64节点
 async function createDefaultSourceNodes(userId, userUuid, env, hostName) {
@@ -662,7 +720,7 @@ async function createDefaultSourceNodes(userId, userUuid, env, hostName) {
       domain: actualDomain,
     };
 
-    // 保存到数据库并自动添加到节点池
+    // 保存到数据库并自动添加到节点池（包含 NAT64 + 可选 ProxyIP）
     const statements = [
       // 保存源节点配置
       env.DB.prepare(
@@ -697,10 +755,59 @@ async function createDefaultSourceNodes(userId, userUuid, env, hostName) {
       );
     }
 
+    // 生成 ProxyIP 节点 - 使用新的生成函数，完全基于 BPB 标准
+    const proxyIPConfig = {
+      uuid: userUuid,
+      domain: actualDomain,
+      proxyIPs: [DEFAULT_PROXY_IP], // BPB 默认 ProxyIP 地址，在文件顶部配置
+      port: 443,
+      fingerprint: "randomized", // BPB 默认指纹
+      alpn: "http/1.1" // BPB 默认 ALPN
+    };
+    
+    const proxyIPNode = generateProxyIPSourceNode(proxyIPConfig);
+    const proxyIPHash = generateSimpleHash(proxyIPNode);
+
+    // 保存 ProxyIP 源节点配置到数据库
+    statements.push(
+      env.DB.prepare(
+        `
+                  INSERT INTO source_node_configs 
+                  (user_id, config_name, node_type, config_data, generated_node, is_default, enabled) 
+                  VALUES (?, ?, ?, ?, ?, ?, ?)
+              `
+      ).bind(
+        userId,
+        "系统默认ProxyIP源节点",
+        "proxyip",
+        JSON.stringify(proxyIPConfig),
+        proxyIPNode,
+        true,
+        true
+      )
+    );
+
+    // 保存 ProxyIP 节点到节点池
+    if (proxyIPHash) {
+      statements.push(
+        env.DB.prepare(
+          `
+                    INSERT OR IGNORE INTO node_pool 
+                    (user_id, source_id, node_url, node_hash, status) 
+                    VALUES (?, ?, ?, ?, 'active')
+                `
+        ).bind(userId, null, proxyIPNode, proxyIPHash)
+      );
+    }
+
     await env.DB.batch(statements);
 
     console.log(`为用户 ${userId} 创建了系统默认NAT64源节点配置并添加到节点池`);
+    console.log(
+      `为用户 ${userId} 创建了系统默认ProxyIP源节点配置并添加到节点池`
+    );
     console.log(`生成的NAT64节点: ${nat64Node}`);
+    console.log(`生成的ProxyIP节点: ${proxyIPNode}`);
     return true;
   } catch (e) {
     console.error("创建默认源节点配置失败:", e);

@@ -59,6 +59,20 @@
     </style>
   </head>
   <body>
+    <!-- Global Alert Container -->
+    <div
+      id="global-alert"
+      class="alert"
+      style="
+        display: none;
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        max-width: 400px;
+      "
+    ></div>
+
     <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
       <div class="container">
@@ -944,8 +958,9 @@
                           type="text"
                           class="form-control"
                           id="proxyip-domain"
-                          placeholder="your-worker.workers.dev"
+                          placeholder="自动获取当前域名"
                           required
+                          readonly
                         />
                       </div>
                       <div class="mb-3">
@@ -976,21 +991,22 @@
                           type="text"
                           class="form-control"
                           id="proxyip-address"
-                          placeholder="例如：1.2.3.4 或留空使用默认"
+                          value="bpb.yousef.isegaro.com"
+                          placeholder="例如：bpb.yousef.isegaro.com"
                         />
                       </div>
                       <div class="mb-3">
                         <label for="proxyip-port" class="form-label"
-                          >代理端口</label
+                          >🔌 HTTPS端口选择</label
                         >
-                        <input
-                          type="number"
-                          class="form-control"
-                          id="proxyip-port"
-                          value="443"
-                          min="1"
-                          max="65535"
-                        />
+                        <select class="form-control" id="proxyip-port">
+                          <option value="443">443</option>
+                          <option value="2053">2053</option>
+                          <option value="2083">2083</option>
+                          <option value="2087">2087</option>
+                          <option value="2096">2096</option>
+                          <option value="8443">8443</option>
+                        </select>
                       </div>
                       <div class="d-grid gap-2">
                         <button
@@ -1807,6 +1823,13 @@
                         <button class="btn btn-outline-light" onclick="logout()">登出</button>
                     `;
           }
+          // 自动设置当前域名
+          const currentDomain = window.location.hostname;
+          const proxyipDomainInput = document.getElementById("proxyip-domain");
+          const nat64DomainInput = document.getElementById("nat64-domain");
+          if (proxyipDomainInput) proxyipDomainInput.value = currentDomain;
+          if (nat64DomainInput) nat64DomainInput.value = currentDomain;
+
           // 加载数据
           loadTags();
           loadSubscriptionSources();
@@ -1846,7 +1869,7 @@
         const alertElement = document.getElementById("auth-alert");
 
         if (!username || !password) {
-          showAlert(alertElement, "danger", "用户名和密码不能为空");
+          showAlert("用户名和密码不能为空", "danger", alertElement);
           return;
         }
 
@@ -1857,7 +1880,7 @@
         });
 
         if (result.ok) {
-          showAlert(alertElement, "success", result.data.message);
+          showAlert(result.data.message, "success", alertElement);
           document.getElementById("username").value = "";
           document.getElementById("password").value = "";
 
@@ -1868,7 +1891,7 @@
             }, 1000);
           }
         } else {
-          showAlert(alertElement, "danger", result.data.error);
+          showAlert(result.data.error, "danger", alertElement);
         }
       }
 
@@ -1878,12 +1901,17 @@
         updateUI();
       }
 
-      function showAlert(element, type, message) {
-        element.className = `alert alert-${type}`;
-        element.textContent = message;
-        element.style.display = "block";
+      function showAlert(message, type, element = null) {
+        const alertElement = element || document.getElementById("global-alert");
+        if (!alertElement) {
+          console.error("Alert element not found");
+          return;
+        }
+        alertElement.className = `alert alert-${type}`;
+        alertElement.textContent = message;
+        alertElement.style.display = "block";
         setTimeout(() => {
-          element.style.display = "none";
+          alertElement.style.display = "none";
         }, 5000);
       }
 
@@ -1985,7 +2013,7 @@
         const alertElement = document.getElementById("create-tag-alert");
 
         if (!tagName) {
-          showAlert(alertElement, "danger", "Tag名称不能为空");
+          showAlert("Tag名称不能为空", "danger", alertElement);
           return;
         }
 
@@ -1995,7 +2023,7 @@
         });
 
         if (result.ok) {
-          showAlert(alertElement, "success", result.data.message);
+          showAlert(result.data.message, "success", alertElement);
           document.getElementById("tagName").value = "";
           document.getElementById("tagDescription").value = "";
           setTimeout(() => {
@@ -2003,7 +2031,7 @@
             loadTags();
           }, 1500);
         } else {
-          showAlert(alertElement, "danger", `创建失败: ${result.data.error}`);
+          showAlert(`创建失败: ${result.data.error}`, "danger", alertElement);
         }
       }
 
@@ -2340,7 +2368,7 @@
         });
 
         if (result.ok) {
-          showAlert(alertElement, "success", result.data.message);
+          showAlert(result.data.message, "success", alertElement);
           document.getElementById("sourceName").value = "";
           document.getElementById("sourceUrl").value = "";
           setTimeout(() => {
@@ -2348,7 +2376,7 @@
             loadSubscriptionSources();
           }, 1500);
         } else {
-          showAlert(alertElement, "danger", `添加失败: ${result.data.error}`);
+          showAlert(`添加失败: ${result.data.error}`, "danger", alertElement);
         }
       }
 
