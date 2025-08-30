@@ -10,7 +10,7 @@ import { connect } from "cloudflare:sockets";
 // =================================================================================
 
 // ProxyIP 配置 - 用户可以修改为自己的 ProxyIP 地址
-const DEFAULT_PROXY_IP = '129.159.84.71';
+const DEFAULT_PROXY_IP = "129.159.84.71";
 
 // 如果需要多个 ProxyIP，用逗号分隔，例如：
 // const DEFAULT_PROXY_IP = '129.159.84.71,your.second.proxy.ip';
@@ -37,13 +37,15 @@ async function handleVlessWebSocket(request, env) {
   // BPB 风格的全局变量初始化 - 完全照搬 BPB 的 init.js
   const url = new URL(request.url);
   globalThis.pathName = url.pathname;
-  globalThis.hostName = request.headers.get('Host');
+  globalThis.hostName = request.headers.get("Host");
   globalThis.urlOrigin = url.origin;
-  
+
   // BPB 的 ProxyIP 初始化逻辑 - 使用顶部配置的 ProxyIP
   globalThis.proxyIPs = DEFAULT_PROXY_IP;
-  
-  console.log(`BPB 风格初始化完成: pathName=${globalThis.pathName}, proxyIPs=${globalThis.proxyIPs}`);
+
+  console.log(
+    `BPB 风格初始化完成: pathName=${globalThis.pathName}, proxyIPs=${globalThis.proxyIPs}`
+  );
 
   let address = "";
   let portWithRandomLog = "";
@@ -397,10 +399,14 @@ async function handleTCPOutBound(
 ) {
   async function connectAndWrite(address, port) {
     // BPB 的 IPv4 地址处理逻辑 - 完全照搬 BPB 源码
-    if (/^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?).){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(address)) {
-      address = `${atob('d3d3Lg==')}${address}${atob('LnNzbGlwLmlv')}`;
+    if (
+      /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?).){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(
+        address
+      )
+    ) {
+      address = `${atob("d3d3Lg==")}${address}${atob("LnNzbGlwLmlv")}`;
     }
-    
+
     const tcpSocket = connect({
       hostname: address,
       port: port,
@@ -416,21 +422,27 @@ async function handleTCPOutBound(
   // BPB 的 ProxyIP 重试逻辑 - 完全照搬 BPB 源码
   async function retry() {
     let proxyIP, proxyIpPort;
-    const encodedPanelProxyIPs = globalThis.pathName.split('/')[2] || '';
-    const decodedProxyIPs = encodedPanelProxyIPs ? atob(encodedPanelProxyIPs) : globalThis.proxyIPs;
-    const proxyIpList = decodedProxyIPs.split(',').map(ip => ip.trim());
-    const selectedProxyIP = proxyIpList[Math.floor(Math.random() * proxyIpList.length)];
-    
-    if (selectedProxyIP.includes(']:')) {
+    const encodedPanelProxyIPs = globalThis.pathName.split("/")[2] || "";
+    const decodedProxyIPs = encodedPanelProxyIPs
+      ? atob(encodedPanelProxyIPs)
+      : globalThis.proxyIPs;
+    const proxyIpList = decodedProxyIPs.split(",").map((ip) => ip.trim());
+    const selectedProxyIP =
+      proxyIpList[Math.floor(Math.random() * proxyIpList.length)];
+
+    if (selectedProxyIP.includes("]:")) {
       const match = selectedProxyIP.match(/^(\[.*?\]):(\d+)$/);
       proxyIP = match[1];
       proxyIpPort = match[2];
     } else {
-      [proxyIP, proxyIpPort] = selectedProxyIP.split(':');
+      [proxyIP, proxyIpPort] = selectedProxyIP.split(":");
     }
 
-    const tcpSocket = await connectAndWrite(proxyIP || addressRemote, +proxyIpPort || portRemote);
-    
+    const tcpSocket = await connectAndWrite(
+      proxyIP || addressRemote,
+      +proxyIpPort || portRemote
+    );
+
     // no matter retry success or not, close websocket
     tcpSocket.closed
       .catch((error) => {
@@ -648,7 +660,7 @@ async function getIPv6ProxyAddress(domain) {
 
 // 删除重复的isIPv4函数定义 - 这个函数已经在前面定义过了
 
-// ProxyIP 源节点生成函数 - 完全基于 BPB 真实源码实现
+// ProxyIP 源节点生成函数 - 基于 BPB 实现，输出v2rayN标准格式
 function generateProxyIPSourceNode(config_data) {
   const {
     uuid,
@@ -656,7 +668,7 @@ function generateProxyIPSourceNode(config_data) {
     proxyIPs = [DEFAULT_PROXY_IP], // BPB 默认 ProxyIP 地址，在文件顶部配置
     port = 443,
     fingerprint = "randomized", // BPB 默认指纹
-    alpn = "http/1.1" // BPB 默认 ALPN
+    alpn = "http/1.1", // BPB 默认 ALPN
   } = config_data;
 
   if (!uuid || !domain) {
@@ -665,8 +677,9 @@ function generateProxyIPSourceNode(config_data) {
 
   // BPB 的 getRandomPath 函数 - 完全照搬源码
   function getRandomPath(length) {
-    let result = '';
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = "";
+    const characters =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     const charactersLength = characters.length;
     for (let i = 0; i < length; i++) {
       result += characters.charAt(Math.floor(Math.random() * charactersLength));
@@ -675,34 +688,51 @@ function generateProxyIPSourceNode(config_data) {
   }
 
   // BPB 的 buildConfig 函数逻辑 - 完全照搬 normalConfigs.js
-  const isTLS = port === 443 || port === 8443 || port === 2053 || port === 2083 || port === 2087 || port === 2096;
-  const security = isTLS ? 'tls' : 'none';
-  
+  const isTLS =
+    port === 443 ||
+    port === 8443 ||
+    port === 2053 ||
+    port === 2083 ||
+    port === 2087 ||
+    port === 2096;
+  const security = isTLS ? "tls" : "none";
+
   // BPB 关键：路径生成逻辑
-  const path = `${getRandomPath(16)}${proxyIPs.length ? `/${btoa(proxyIPs.join(','))}` : ''}`;
-  
-  // 构建 VLESS 配置 URL - 完全按照 BPB 的 buildConfig 函数
-  const config = new URL(`vless://config`);
-  config.username = uuid;
-  config.hostname = domain;
-  config.port = port;
-  config.searchParams.append('encryption', 'none');
-  config.searchParams.append('host', domain); // BPB 使用 domain 作为 host
-  config.searchParams.append('type', 'ws');
-  config.searchParams.append('security', security);
-  config.searchParams.append('path', `/${path}?ed=2560`); // BPB 路径格式
-  
+  const path = `${getRandomPath(16)}${
+    proxyIPs.length ? `/${btoa(proxyIPs.join(","))}` : ""
+  }`;
+  const fullPath = `/${path}?ed=2560`;
+
+  console.log(
+    `生成 BPB ProxyIP 节点: path=${fullPath}, proxyIPs=${proxyIPs.join(",")}`
+  );
+
+  // 直接构建标准格式的URL字符串，确保与v2rayN导出格式完全一致
+  // 参数顺序：encryption -> security -> sni -> alpn -> fp -> type -> host -> path
+  const params = [];
+  params.push(`encryption=none`);
+  params.push(`security=${security}`);
+
   if (isTLS) {
-    config.searchParams.append('sni', domain); // BPB 使用 domain 作为 SNI
-    config.searchParams.append('fp', fingerprint);
-    config.searchParams.append('alpn', alpn);
+    params.push(`sni=${domain}`);
+    params.push(`alpn=${encodeURIComponent(alpn)}`); // 保持编码一致性
+    params.push(`fp=${fingerprint}`);
   }
-  
-  config.hash = `BPB-ProxyIP-${domain}`;
-  
-  console.log(`生成 BPB ProxyIP 节点: path=/${path}?ed=2560, proxyIPs=${proxyIPs.join(',')}`);
-  
-  return config.href;
+
+  params.push(`type=ws`);
+  params.push(`host=${domain}`);
+  params.push(`path=${encodeURIComponent(fullPath)}`); // 保持路径编码一致性
+
+  const hashPart = `BPB-ProxyIP-${domain}_${domain.replace(/\./g, "%3A")}`;
+
+  // 构建完整的标准格式URL
+  const standardUrl = `vless://${uuid}@${domain}:${port}?${params.join(
+    "&"
+  )}#${encodeURIComponent(hashPart)}`;
+
+  console.log(`生成标准格式ProxyIP节点: ${standardUrl.substring(0, 150)}...`);
+
+  return standardUrl;
 }
 
 // 创建用户默认源节点配置 - 简化版本，只生成NAT64节点
@@ -762,9 +792,9 @@ async function createDefaultSourceNodes(userId, userUuid, env, hostName) {
       proxyIPs: [DEFAULT_PROXY_IP], // BPB 默认 ProxyIP 地址，在文件顶部配置
       port: 443,
       fingerprint: "randomized", // BPB 默认指纹
-      alpn: "http/1.1" // BPB 默认 ALPN
+      alpn: "http/1.1", // BPB 默认 ALPN
     };
-    
+
     const proxyIPNode = generateProxyIPSourceNode(proxyIPConfig);
     const proxyIPHash = generateSimpleHash(proxyIPNode);
 
@@ -887,6 +917,173 @@ async function getUserBySession(request, env) {
     console.error("Session validation error:", e);
     return null;
   }
+}
+
+// VLESS URL解析函数
+function parseVlessUrl(url) {
+  try {
+    if (!url.startsWith("vless://")) {
+      return null;
+    }
+
+    const urlObj = new URL(url);
+    const result = {
+      protocol: "vless",
+      uuid: urlObj.username,
+      host: urlObj.hostname,
+      port: urlObj.port || "443",
+      params: {},
+      hash: urlObj.hash ? decodeURIComponent(urlObj.hash.substring(1)) : "",
+    };
+
+    // 解析所有参数并解码
+    for (const [key, value] of urlObj.searchParams) {
+      result.params[key] = decodeURIComponent(value);
+    }
+
+    return result;
+  } catch (e) {
+    console.log(`VLESS URL解析失败: ${e.message}`);
+    return null;
+  }
+}
+
+// URL标准化函数 - 按照v2rayN标准顺序重新构建
+function normalizeVlessUrl(url) {
+  const parsed = parseVlessUrl(url);
+  if (!parsed) {
+    return url; // 如果解析失败，返回原始URL
+  }
+
+  // v2rayN标准参数顺序
+  const paramOrder = [
+    "encryption",
+    "security",
+    "sni",
+    "alpn",
+    "fp",
+    "type",
+    "host",
+    "path",
+  ];
+
+  // 构建标准化URL
+  let normalizedUrl = `vless://${parsed.uuid}@${parsed.host}:${parsed.port}?`;
+
+  const params = [];
+  for (const paramName of paramOrder) {
+    if (parsed.params[paramName]) {
+      params.push(`${paramName}=${parsed.params[paramName]}`);
+    }
+  }
+
+  // 添加其他未在标准顺序中的参数
+  for (const [key, value] of Object.entries(parsed.params)) {
+    if (!paramOrder.includes(key)) {
+      params.push(`${key}=${value}`);
+    }
+  }
+
+  normalizedUrl += params.join("&");
+
+  if (parsed.hash) {
+    normalizedUrl += `#${parsed.hash}`;
+  }
+
+  return normalizedUrl;
+}
+
+// 智能URL匹配函数 - 解决ProxyIP和NAT64节点的编码差异和参数顺序问题
+async function findNodeByUrl(env, userId, nodeUrl) {
+  const trimmedUrl = nodeUrl.trim();
+
+  // 1. 首先尝试原始URL直接匹配
+  let node = await env.DB.prepare(
+    "SELECT id FROM node_pool WHERE user_id = ? AND node_url = ?"
+  )
+    .bind(userId, trimmedUrl)
+    .first();
+
+  if (node) {
+    console.log(`原始URL直接匹配成功: ${trimmedUrl.substring(0, 100)}...`);
+    return node;
+  }
+
+  // 2. 尝试标准化匹配 - 这是关键的新功能
+  try {
+    const normalizedInput = normalizeVlessUrl(trimmedUrl);
+    console.log(`输入URL标准化: ${normalizedInput.substring(0, 150)}...`);
+
+    // 获取用户的所有节点进行标准化比较
+    const { results: allNodes } = await env.DB.prepare(
+      "SELECT id, node_url FROM node_pool WHERE user_id = ?"
+    )
+      .bind(userId)
+      .all();
+
+    for (const dbNode of allNodes || []) {
+      const normalizedDb = normalizeVlessUrl(dbNode.node_url);
+      if (normalizedInput === normalizedDb) {
+        console.log(`标准化匹配成功! 数据库节点ID: ${dbNode.id}`);
+        console.log(`数据库URL标准化: ${normalizedDb.substring(0, 150)}...`);
+        return { id: dbNode.id };
+      }
+    }
+
+    console.log(`标准化匹配失败，检查了 ${allNodes?.length || 0} 个节点`);
+  } catch (e) {
+    console.log(`标准化匹配过程出错: ${e.message}`);
+  }
+
+  // 3. 尝试解码后的URL匹配（向后兼容）
+  try {
+    const decodedUrl = decodeURIComponent(trimmedUrl);
+    if (decodedUrl !== trimmedUrl) {
+      console.log(`尝试解码后的URL匹配: ${decodedUrl.substring(0, 100)}...`);
+      node = await env.DB.prepare(
+        "SELECT id FROM node_pool WHERE user_id = ? AND node_url = ?"
+      )
+        .bind(userId, decodedUrl)
+        .first();
+
+      if (node) {
+        console.log(`解码URL匹配成功`);
+        return node;
+      }
+    }
+  } catch (e) {
+    console.log(`URL解码失败: ${e.message}`);
+  }
+
+  // 4. 增强调试：检查节点是否存在于数据库中（不限用户）
+  if (!node) {
+    console.log(`调试：检查节点是否存在于任何用户的数据库中...`);
+    const anyUserNode = await env.DB.prepare(
+      "SELECT id, user_id FROM node_pool WHERE node_url = ? LIMIT 1"
+    )
+      .bind(trimmedUrl)
+      .first();
+
+    if (anyUserNode) {
+      console.log(
+        `调试：节点存在但属于用户 ${anyUserNode.user_id}，当前用户 ${userId}`
+      );
+    } else {
+      console.log(`调试：节点在整个数据库中都不存在`);
+
+      // 简化调试：只显示用户节点总数，避免复杂的LIKE查询导致SQL错误
+      const nodeCount = await env.DB.prepare(
+        "SELECT COUNT(*) as count FROM node_pool WHERE user_id = ?"
+      )
+        .bind(userId)
+        .first();
+
+      console.log(`调试：用户共有 ${nodeCount?.count || 0} 个节点`);
+    }
+  }
+
+  console.log(`所有URL匹配方式都失败: ${trimmedUrl.substring(0, 100)}...`);
+  return null;
 }
 
 // 修复后的哈希函数 - 解决hash冲突问题
@@ -1692,12 +1889,8 @@ export default {
           const trimmedUrl = nodeUrl.trim();
           console.log(`处理节点: ${trimmedUrl.substring(0, 50)}...`);
 
-          // 先检查节点是否已存在（使用URL直接匹配，避免hash问题）
-          const existingNode = await env.DB.prepare(
-            "SELECT id FROM node_pool WHERE user_id = ? AND node_url = ?"
-          )
-            .bind(user.id, trimmedUrl)
-            .first();
+          // 使用统一的URL匹配函数检查节点是否已存在
+          const existingNode = await findNodeByUrl(env, user.id, trimmedUrl);
 
           let nodeId;
           if (existingNode) {
@@ -2235,12 +2428,12 @@ export default {
                   if (
                     insertError.message.includes("UNIQUE constraint failed")
                   ) {
-                    // Hash冲突，尝试查找现有节点
-                    const conflictNode = await env.DB.prepare(
-                      "SELECT id FROM node_pool WHERE user_id = ? AND node_url = ?"
-                    )
-                      .bind(user.id, trimmedUrl)
-                      .first();
+                    // Hash冲突，使用统一URL匹配函数查找现有节点
+                    const conflictNode = await findNodeByUrl(
+                      env,
+                      user.id,
+                      trimmedUrl
+                    );
 
                     if (conflictNode) {
                       node = conflictNode;
@@ -2302,45 +2495,33 @@ export default {
                 `删除操作：查找节点 ${trimmedUrl.substring(0, 50)}...`
               );
 
-              // GitHub版本的正确做法：使用URL直接匹配查找节点
-              // 同时尝试原始URL和解码后的URL进行匹配（解决编码问题）
-              let node = await env.DB.prepare(
-                "SELECT id FROM node_pool WHERE user_id = ? AND node_url = ?"
-              )
-                .bind(user.id, trimmedUrl)
-                .first();
-              
-              // 如果直接匹配失败，尝试解码后的URL匹配
+              // 使用统一的URL匹配函数查找节点（解决ProxyIP编码问题）
+              const node = await findNodeByUrl(env, user.id, trimmedUrl);
+
+              // 增强调试：检查节点是否存在于数据库中（不限用户）
               if (!node) {
-                try {
-                  const decodedUrl = decodeURIComponent(trimmedUrl);
-                  if (decodedUrl !== trimmedUrl) {
-                    console.log(`尝试解码后的URL匹配: ${decodedUrl.substring(0, 100)}...`);
-                    node = await env.DB.prepare(
-                      "SELECT id FROM node_pool WHERE user_id = ? AND node_url = ?"
-                    )
-                      .bind(user.id, decodedUrl)
-                      .first();
-                  }
-                } catch (e) {
-                  console.log(`URL解码失败: ${e.message}`);
-                }
-              }
-              
-              // 如果解码匹配失败，尝试编码后的URL匹配
-              if (!node) {
-                try {
-                  const encodedUrl = encodeURIComponent(trimmedUrl);
-                  if (encodedUrl !== trimmedUrl) {
-                    console.log(`尝试编码后的URL匹配: ${encodedUrl.substring(0, 100)}...`);
-                    node = await env.DB.prepare(
-                      "SELECT id FROM node_pool WHERE user_id = ? AND node_url = ?"
-                    )
-                      .bind(user.id, encodedUrl)
-                      .first();
-                  }
-                } catch (e) {
-                  console.log(`URL编码失败: ${e.message}`);
+                console.log(`调试：检查节点是否存在于任何用户的数据库中...`);
+                const anyUserNode = await env.DB.prepare(
+                  "SELECT id, user_id FROM node_pool WHERE node_url = ? LIMIT 1"
+                )
+                  .bind(trimmedUrl)
+                  .first();
+
+                if (anyUserNode) {
+                  console.log(
+                    `调试：节点存在但属于用户 ${anyUserNode.user_id}，当前用户 ${user.id}`
+                  );
+                } else {
+                  console.log(`调试：节点在整个数据库中都不存在`);
+
+                  // 简化调试：只显示用户节点总数，避免复杂的LIKE查询导致SQL错误
+                  const nodeCount = await env.DB.prepare(
+                    "SELECT COUNT(*) as count FROM node_pool WHERE user_id = ?"
+                  )
+                    .bind(user.id)
+                    .first();
+
+                  console.log(`调试：用户共有 ${nodeCount?.count || 0} 个节点`);
                 }
               }
 
