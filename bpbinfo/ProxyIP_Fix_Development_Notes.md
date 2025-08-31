@@ -1842,29 +1842,29 @@ examples: {
 
 1. **检查前端代码**：
 
-   ```javascript
-   // 复制功能示例
-   function copyToClipboard(text) {
-     if (navigator.clipboard) {
-       navigator.clipboard
-         .writeText(text)
-         .then(() => {
-           console.log("复制成功");
-         })
-         .catch((err) => {
-           console.error("复制失败:", err);
-         });
-     } else {
-       // 降级方案
-       const textArea = document.createElement("textarea");
-       textArea.value = text;
-       document.body.appendChild(textArea);
-       textArea.select();
-       document.execCommand("copy");
-       document.body.removeChild(textArea);
-     }
-   }
-   ```
+```javascript
+// 复制功能示例
+function copyToClipboard(text) {
+  if (navigator.clipboard) {
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        console.log("复制成功");
+      })
+      .catch((err) => {
+        console.error("复制失败:", err);
+      });
+  } else {
+    // 降级方案
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    document.body.appendChild(textArea);
+    textArea.select();
+    document.execCommand("copy");
+    document.body.removeChild(textArea);
+  }
+}
+```
 
 2. **确保数据正确**：
 

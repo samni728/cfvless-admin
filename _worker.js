@@ -3449,13 +3449,10 @@ export default {
     }
 
     // 路由: 导入源节点到Tag (POST /api/source-nodes/:id/import-to-tag) - 受保护
-    if (
-      url.pathname.includes("/import-to-tag") &&
-      request.method === "POST"
-    ) {
+    if (url.pathname.includes("/import-to-tag") && request.method === "POST") {
       try {
         console.log(`导入到Tag请求: ${url.pathname}`);
-        
+
         const user = await getUserBySession(request, env);
         if (!user)
           return new Response(JSON.stringify({ error: "未授权" }), {
@@ -3464,7 +3461,7 @@ export default {
 
         const configId = url.pathname.split("/")[3];
         console.log(`配置ID: ${configId}`);
-        
+
         if (!configId || isNaN(parseInt(configId))) {
           return new Response(JSON.stringify({ error: "无效的配置ID" }), {
             status: 400,
@@ -3536,13 +3533,26 @@ export default {
 
         // 生成节点hash
         const nodeHash = generateSimpleHash(sourceConfig.generated_node);
+        console.log(`生成的节点hash: ${nodeHash}`);
 
-        // 添加到节点池
-        await env.DB.prepare(
-          "INSERT OR IGNORE INTO node_pool (user_id, source_id, node_url, node_hash, status) VALUES (?, ?, ?, ?, 'active')"
-        )
-          .bind(user.id, sourceConfig.id, sourceConfig.generated_node, nodeHash)
-          .run();
+        // 添加到节点池 - 修复外键约束问题，source_id设为null
+        try {
+          const insertResult = await env.DB.prepare(
+            "INSERT OR IGNORE INTO node_pool (user_id, source_id, node_url, node_hash, status) VALUES (?, ?, ?, ?, 'active')"
+          )
+            .bind(
+              user.id,
+              null, // source_id设为null，因为这是从源节点配置导入的，不是从订阅源导入的
+              sourceConfig.generated_node,
+              nodeHash
+            )
+            .run();
+
+          console.log(`节点池插入结果:`, insertResult);
+        } catch (insertError) {
+          console.error(`节点池插入失败:`, insertError);
+          throw insertError;
+        }
 
         // 获取刚插入的节点ID
         const node = await env.DB.prepare(
@@ -3551,13 +3561,24 @@ export default {
           .bind(user.id, nodeHash)
           .first();
 
+        console.log(`查询到的节点:`, node);
+
         if (node) {
           // 添加到Tag
-          await env.DB.prepare(
-            "INSERT OR IGNORE INTO node_tag_map (tag_id, node_id) VALUES (?, ?)"
-          )
-            .bind(targetTagId, node.id)
-            .run();
+          try {
+            const tagMapResult = await env.DB.prepare(
+              "INSERT OR IGNORE INTO node_tag_map (tag_id, node_id) VALUES (?, ?)"
+            )
+              .bind(targetTagId, node.id)
+              .run();
+
+            console.log(`Tag映射插入结果:`, tagMapResult);
+          } catch (tagMapError) {
+            console.error(`Tag映射插入失败:`, tagMapError);
+            throw tagMapError;
+          }
+        } else {
+          console.log(`未找到节点，无法添加到Tag`);
         }
 
         return new Response(
