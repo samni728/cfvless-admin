@@ -661,7 +661,7 @@ async function getIPv6ProxyAddress(domain) {
 // 删除重复的isIPv4函数定义 - 这个函数已经在前面定义过了
 
 // ProxyIP 源节点生成函数 - 基于 BPB 实现，支持用户自定义配置
-function generateProxyIPSourceNode(config_data) {
+function generateProxyIPSourceNode(config_data, config_name = null) {
   // 兼容前端传递的错误参数名
   let proxyIPs = config_data.proxyIPs;
   let port = config_data.port;
@@ -807,12 +807,14 @@ function generateProxyIPSourceNode(config_data) {
   params.push(`host=${domain}`);
   params.push(`path=${encodeURIComponent(fullPath)}`); // 保持路径编码一致性
 
-  const hashPart = `BPB-ProxyIP-${domain}_${domain.replace(/\./g, "%3A")}`;
+  // 使用配置名称作为remarks，如果没有则使用默认格式
+  const remarks = config_name || `BPB-ProxyIP-${domain}`;
+  const hashPart = encodeURIComponent(remarks);
 
   // 构建完整的标准格式URL
   const standardUrl = `vless://${uuid}@${domain}:${portNum}?${params.join(
     "&"
-  )}#${encodeURIComponent(hashPart)}`;
+  )}#${hashPart}`;
 
   console.log(
     `生成自定义标准格式ProxyIP节点: ${standardUrl.substring(0, 150)}...`
@@ -2920,8 +2922,8 @@ export default {
               config_data.domain
             );
           } else if (node_type === "proxyip") {
-            // 使用增强的 ProxyIP 生成函数
-            generatedNode = generateProxyIPSourceNode(config_data);
+            // 使用增强的 ProxyIP 生成函数，传递配置名称用于remarks
+            generatedNode = generateProxyIPSourceNode(config_data, config_name);
           }
         } catch (e) {
           return new Response(
@@ -3263,8 +3265,8 @@ export default {
               config_data.domain
             );
           } else if (node_type === "proxyip") {
-            // 使用增强的 ProxyIP 生成函数
-            generatedNode = generateProxyIPSourceNode(config_data);
+            // 使用增强的 ProxyIP 生成函数，传递配置名称用于remarks
+            generatedNode = generateProxyIPSourceNode(config_data, "预览配置");
           }
         } catch (e) {
           return new Response(
@@ -3364,7 +3366,7 @@ export default {
                 config_data.domain
               );
             } else if (existingConfig.node_type === "proxyip") {
-              generatedNode = generateProxyIPSourceNode(config_data);
+              generatedNode = generateProxyIPSourceNode(config_data, config_name);
             }
           } catch (e) {
             return new Response(
@@ -3434,6 +3436,126 @@ export default {
         return new Response(
           JSON.stringify({
             error: `更新源节点配置失败: ${e.message}`,
+          }),
+          {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      }
+    }
+
+    // 路由: 导入源节点到Tag (POST /api/source-nodes/:id/import-to-tag) - 受保护
+    if (
+      url.pathname.match(/\/api\/source-nodes\/\d+\/import-to-tag$/) &&
+      request.method === "POST"
+    ) {
+      try {
+        const user = await getUserBySession(request, env);
+        if (!user)
+          return new Response(JSON.stringify({ error: "未授权" }), {
+            status: 401,
+          });
+
+        const configId = url.pathname.split("/")[3];
+        if (!configId || isNaN(parseInt(configId))) {
+          return new Response(JSON.stringify({ error: "无效的配置ID" }), {
+            status: 400,
+          });
+        }
+
+        const { tag_id } = await request.json();
+
+        // 验证源节点配置所有权
+        const sourceConfig = await env.DB.prepare(
+          "SELECT id, config_name, generated_node FROM source_node_configs WHERE user_id = ? AND id = ?"
+        )
+          .bind(user.id, parseInt(configId))
+          .first();
+
+        if (!sourceConfig) {
+          return new Response(JSON.stringify({ error: "源节点配置不存在或无权限" }), {
+            status: 404,
+          });
+        }
+
+        // 如果指定了tag_id，验证tag所有权
+        let targetTagId = tag_id;
+        if (tag_id) {
+          const tag = await env.DB.prepare(
+            "SELECT id, tag_name FROM tags WHERE user_id = ? AND id = ?"
+          )
+            .bind(user.id, parseInt(tag_id))
+            .first();
+
+          if (!tag) {
+            return new Response(JSON.stringify({ error: "指定的Tag不存在或无权限" }), {
+              status: 404,
+            });
+          }
+          targetTagId = tag.id;
+        } else {
+          // 如果没有指定tag_id，查找或创建"源节点"Tag
+          let sourceNodeTag = await env.DB.prepare(
+            "SELECT id FROM tags WHERE user_id = ? AND tag_name = ?"
+          )
+            .bind(user.id, "源节点")
+            .first();
+
+          if (!sourceNodeTag) {
+            // 创建"源节点"Tag
+            const result = await env.DB.prepare(
+              "INSERT INTO tags (user_id, tag_name, tag_uuid, description) VALUES (?, ?, ?, ?)"
+            )
+              .bind(user.id, "源节点", crypto.randomUUID(), "系统自动创建的源节点Tag")
+              .run();
+            targetTagId = result.meta.last_row_id;
+          } else {
+            targetTagId = sourceNodeTag.id;
+          }
+        }
+
+        // 生成节点hash
+        const nodeHash = generateSimpleHash(sourceConfig.generated_node);
+
+        // 添加到节点池
+        await env.DB.prepare(
+          "INSERT OR IGNORE INTO node_pool (user_id, source_id, node_url, node_hash, status) VALUES (?, ?, ?, ?, 'active')"
+        )
+          .bind(user.id, sourceConfig.id, sourceConfig.generated_node, nodeHash)
+          .run();
+
+        // 获取刚插入的节点ID
+        const node = await env.DB.prepare(
+          "SELECT id FROM node_pool WHERE user_id = ? AND node_hash = ? ORDER BY id DESC LIMIT 1"
+        )
+          .bind(user.id, nodeHash)
+          .first();
+
+        if (node) {
+          // 添加到Tag
+          await env.DB.prepare(
+            "INSERT OR IGNORE INTO node_tag_map (tag_id, node_id) VALUES (?, ?)"
+          )
+            .bind(targetTagId, node.id)
+            .run();
+        }
+
+        return new Response(
+          JSON.stringify({
+            message: "源节点已成功导入到Tag",
+            tag_id: targetTagId,
+            node_id: node ? node.id : null,
+          }),
+          {
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      } catch (e) {
+        console.error("导入源节点到Tag失败:", e);
+        return new Response(
+          JSON.stringify({
+            error: `导入源节点到Tag失败: ${e.message}`,
           }),
           {
             status: 500,

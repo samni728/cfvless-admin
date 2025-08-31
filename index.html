@@ -1317,6 +1317,63 @@
       </div>
     </div>
 
+    <!-- Import to Tag Modal -->
+    <div
+      class="modal fade"
+      id="importToTagModal"
+      tabindex="-1"
+      aria-labelledby="importToTagModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="importToTagModalLabel">
+              🏷️ 导入到Tag
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <div
+              id="import-tag-alert"
+              class="alert"
+              style="display: none"
+            ></div>
+            <div class="mb-3">
+              <label for="importTagSelect" class="form-label">选择Tag</label>
+              <select class="form-control" id="importTagSelect">
+                <option value="">默认导入到"源节点"Tag</option>
+              </select>
+              <div class="form-text">
+                选择要将源节点导入到哪个Tag，留空则导入到默认的"源节点"Tag
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              onclick="confirmImportToTag()"
+            >
+              确认导入
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ProxyIP Selector Modal -->
     <div
       class="modal fade"
@@ -1696,7 +1753,7 @@
                                 </div>
                                 <div class="btn-group btn-group-sm">
                                     <button class="btn btn-outline-primary" onclick="copyToClipboard('default-node-${node.id}')">📋</button>
-                                    <button class="btn btn-outline-success" onclick="importToGenerator('${node.generated_node}', '${node.node_type}')">🚀 导入</button>
+                                    <button class="btn btn-outline-success" onclick="importToTag(${node.id}, '${node.config_name}')">🏷️ 导入到Tag</button>
                                 </div>
                             </div>
                             <div class="mt-2">
@@ -1754,9 +1811,7 @@
                                     <button class="btn btn-outline-primary" onclick="copyToClipboard('custom-node-${
                                       node.id
                                     }')">📋</button>
-                                    <button class="btn btn-outline-success" onclick="importToGenerator('${
-                                      node.generated_node
-                                    }', '${node.node_type}')">🚀 导入</button>
+                                    <button class="btn btn-outline-success" onclick="importToTag(${node.id}, '${node.config_name}')">🏷️ 导入到Tag</button>
                                     <button class="btn btn-outline-danger" onclick="deleteSourceNode(${
                                       node.id
                                     }, '${node.config_name}')">🗑️</button>
@@ -1776,7 +1831,77 @@
           .join("");
       }
 
-      // 导入到生成器
+      // 导入到Tag相关函数
+      let currentImportNodeId = null;
+      let currentImportNodeName = null;
+
+      function importToTag(nodeId, nodeName) {
+        currentImportNodeId = nodeId;
+        currentImportNodeName = nodeName;
+        
+        // 加载用户的所有Tag
+        loadTagsForImport();
+        
+        // 显示模态框
+        const modal = new bootstrap.Modal(document.getElementById('importToTagModal'));
+        modal.show();
+      }
+
+      async function loadTagsForImport() {
+        try {
+          const result = await apiRequest("/api/tags", "GET");
+          if (result.ok && Array.isArray(result.data)) {
+            const select = document.getElementById("importTagSelect");
+            // 保留默认选项
+            select.innerHTML = '<option value="">默认导入到"源节点"Tag</option>';
+            
+            // 添加用户的所有Tag
+            result.data.forEach(tag => {
+              const option = document.createElement('option');
+              option.value = tag.id;
+              option.textContent = `🏷️ ${tag.tag_name}`;
+              select.appendChild(option);
+            });
+          }
+        } catch (error) {
+          console.error("加载Tag失败:", error);
+        }
+      }
+
+      async function confirmImportToTag() {
+        if (!currentImportNodeId) {
+          showAlert("导入失败：节点ID无效", "danger", document.getElementById("import-tag-alert"));
+          return;
+        }
+
+        const tagId = document.getElementById("importTagSelect").value;
+        
+        try {
+          const result = await apiRequest(`/api/source-nodes/${currentImportNodeId}/import-to-tag`, "POST", {
+            tag_id: tagId || null
+          });
+
+          if (result.ok) {
+            showAlert(`源节点"${currentImportNodeName}"已成功导入到Tag！`, "success", document.getElementById("import-tag-alert"));
+            
+            // 关闭模态框
+            setTimeout(() => {
+              const modal = bootstrap.Modal.getInstance(document.getElementById('importToTagModal'));
+              if (modal) {
+                modal.hide();
+              }
+              // 刷新Tag列表
+              loadTags();
+            }, 1500);
+          } else {
+            showAlert(`导入失败: ${result.data.error}`, "danger", document.getElementById("import-tag-alert"));
+          }
+        } catch (error) {
+          showAlert(`导入失败: ${error.message}`, "danger", document.getElementById("import-tag-alert"));
+        }
+      }
+
+      // 导入到生成器（保留原有功能）
       function importToGenerator(nodeUrl, nodeType) {
         // 解析节点URL获取配置信息
         try {
