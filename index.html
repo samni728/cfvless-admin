@@ -976,13 +976,25 @@
                         <label for="proxyip-address" class="form-label"
                           >代理IP地址</label
                         >
-                        <input
-                          type="text"
-                          class="form-control"
-                          id="proxyip-address"
-                          value="bpb.yousef.isegaro.com"
-                          placeholder="例如：bpb.yousef.isegaro.com"
-                        />
+                        <div class="input-group">
+                          <input
+                            type="text"
+                            class="form-control"
+                            id="proxyip-address"
+                            placeholder="例如：164.90.228.172"
+                          />
+                          <button
+                            class="btn btn-outline-info"
+                            type="button"
+                            onclick="openProxyIPSelector()"
+                            title="获取可用代理IP"
+                          >
+                            🌐 获取代理IP
+                          </button>
+                        </div>
+                        <div class="form-text">
+                          点击"获取代理IP"按钮测试可用IP，选择您想要的落地地区
+                        </div>
                       </div>
                       <div class="mb-3">
                         <label for="proxyip-port" class="form-label"
@@ -1305,6 +1317,68 @@
       </div>
     </div>
 
+    <!-- ProxyIP Selector Modal -->
+    <div
+      class="modal fade"
+      id="proxyIPSelectorModal"
+      tabindex="-1"
+      aria-labelledby="proxyIPSelectorModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="proxyIPSelectorModalLabel">
+              🌐 获取可用代理IP
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <div class="alert alert-info">
+              <h6>📋 使用说明</h6>
+              <ol class="mb-0">
+                <li>点击下方"打开测试页面"按钮</li>
+                <li>在打开的页面中点击"单次测试"</li>
+                <li>查看测试结果列表，选择您想要的IP地址</li>
+                <li>复制IP地址，粘贴到代理IP地址输入框</li>
+              </ol>
+            </div>
+            <div class="d-grid gap-2">
+              <button
+                type="button"
+                class="btn btn-primary btn-lg"
+                onclick="openProxyIPTestPage()"
+              >
+                🔗 打开测试页面
+              </button>
+            </div>
+            <div class="mt-3">
+              <h6>💡 提示</h6>
+              <ul class="mb-0">
+                <li>选择延迟较低的IP地址以获得更好的连接体验</li>
+                <li>不同地区的IP可能提供不同的网络访问效果</li>
+                <li>建议选择您目标地区的IP地址</li>
+              </ul>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              关闭
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Add Source Modal -->
     <div
       class="modal fade"
@@ -1536,6 +1610,26 @@
       }
 
       // 保存ProxyIP配置（已合并到generateAndSaveProxyIPNode函数中）
+
+      // ProxyIP选择器相关函数
+      function openProxyIPSelector() {
+        const modal = new bootstrap.Modal(document.getElementById('proxyIPSelectorModal'));
+        modal.show();
+      }
+
+      function openProxyIPTestPage() {
+        // 打开itdog.cn的测试页面
+        window.open('https://www.itdog.cn/tcping/bpb.yousef.isegaro.com:443', '_blank');
+        
+        // 显示提示信息
+        showAlert('测试页面已在新窗口打开，请按照说明操作', 'info');
+        
+        // 关闭弹窗
+        const modal = bootstrap.Modal.getInstance(document.getElementById('proxyIPSelectorModal'));
+        if (modal) {
+          modal.hide();
+        }
+      }
 
       // 加载源节点配置
       async function loadSourceNodes() {
