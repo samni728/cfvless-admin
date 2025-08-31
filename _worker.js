@@ -2766,11 +2766,16 @@ export default {
           });
 
         const { config_name, node_type, config_data } = await request.json();
-        
+
         // 对于 ProxyIP 类型，强制设置域名为当前域名
         if (node_type === "proxyip") {
-          config_data.domain = request.headers.get("Host") || "your-domain.pages.dev";
+          config_data.domain =
+            request.headers.get("Host") || "your-domain.pages.dev";
           console.log(`强制设置域名为当前域名: ${config_data.domain}`);
+          
+          // 调试：检查用户自定义的 ProxyIP 配置
+          console.log(`用户配置的 ProxyIP: ${JSON.stringify(config_data.proxyIPs)}`);
+          console.log(`用户配置的完整数据: ${JSON.stringify(config_data)}`);
         }
 
         if (!config_name || !node_type || !config_data) {
@@ -3094,11 +3099,16 @@ export default {
           });
 
         const { node_type, config_data } = await request.json();
-        
+
         // 对于 ProxyIP 类型，强制设置域名为当前域名
         if (node_type === "proxyip") {
-          config_data.domain = request.headers.get("Host") || "your-domain.pages.dev";
+          config_data.domain =
+            request.headers.get("Host") || "your-domain.pages.dev";
           console.log(`强制设置域名为当前域名: ${config_data.domain}`);
+          
+          // 调试：检查用户自定义的 ProxyIP 配置
+          console.log(`用户配置的 ProxyIP: ${JSON.stringify(config_data.proxyIPs)}`);
+          console.log(`用户配置的完整数据: ${JSON.stringify(config_data)}`);
         }
 
         if (!node_type || !config_data) {
