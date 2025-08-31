@@ -51,3 +51,43 @@ git show --name-only HEAD
 echo ""
 echo "🎉 修复已成功提交到本地Git仓库！"
 echo "💡 下一步: 使用 'git push origin main' 推送到GitHub"
+
+# 修复自定义 ProxyIP 源节点 UUID 验证问题
+echo "🔧 修复自定义 ProxyIP 源节点 UUID 验证问题"
+
+# 添加所有修改的文件
+git add .
+
+# 提交更改
+git commit -m "🔧 修复自定义 ProxyIP 源节点 UUID 验证问题
+
+🎯 修复内容：
+- 解决自定义 ProxyIP 节点无法连接的问题
+- 添加 UUID 自动修正功能，确保使用当前用户的 UUID
+- 修改配置模板 API，强制使用正确的用户 UUID
+- 更新示例配置，确保 UUID 一致性
+
+🔧 技术细节：
+- 在创建源节点配置时自动修正 UUID 不匹配问题
+- 增强 UUID 验证机制，确保用户隔离
+- 添加详细的日志记录，便于调试
+
+✅ 修复效果：
+- 自定义 ProxyIP 节点现在可以正常连接
+- UUID 验证成功，连接不再被拒绝
+- 提供自动修正功能，提升用户体验
+
+📝 修改文件：
+- _worker.js - 修复 UUID 验证逻辑
+- bpbinfo/ProxyIP_Fix_Development_Notes.md - 更新开发笔记
+- COMMIT_MESSAGE.md - 更新提交备注
+
+🎉 预期效果：
+- 解决连接问题：自定义 ProxyIP 节点可以正常连接
+- UUID 一致性：确保所有节点使用正确的用户 UUID
+- 用户体验：提供清晰的错误信息和自动修正
+- 安全性：防止用户使用其他用户的 UUID"
+
+echo "✅ 提交完成！"
+echo "📝 提交信息：修复自定义 ProxyIP 源节点 UUID 验证问题"
+echo "🔧 主要修复：UUID 自动修正、配置模板优化、示例配置更新"

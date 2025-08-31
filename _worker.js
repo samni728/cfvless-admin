@@ -660,22 +660,83 @@ async function getIPv6ProxyAddress(domain) {
 
 // 删除重复的isIPv4函数定义 - 这个函数已经在前面定义过了
 
-// ProxyIP 源节点生成函数 - 基于 BPB 实现，输出v2rayN标准格式
+// ProxyIP 源节点生成函数 - 基于 BPB 实现，支持用户自定义配置
 function generateProxyIPSourceNode(config_data) {
   const {
     uuid,
     domain,
-    proxyIPs = [DEFAULT_PROXY_IP], // BPB 默认 ProxyIP 地址，在文件顶部配置
+    proxyIPs = [DEFAULT_PROXY_IP], // 默认 ProxyIP 地址，用户可自定义
     port = 443,
-    fingerprint = "randomized", // BPB 默认指纹
-    alpn = "http/1.1", // BPB 默认 ALPN
+    fingerprint = "randomized", // 默认指纹，用户可自定义
+    alpn = "http/1.1", // 默认 ALPN，用户可自定义
   } = config_data;
 
+  // 参数验证
   if (!uuid || !domain) {
     throw new Error("UUID 和域名是必需的参数");
   }
 
-  // BPB 的 getRandomPath 函数 - 完全照搬源码
+  // UUID 格式验证
+  const uuidRegex =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(uuid)) {
+    throw new Error("UUID 格式无效");
+  }
+
+  // 域名格式验证
+  const domainRegex =
+    /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+  if (!domainRegex.test(domain)) {
+    throw new Error("域名格式无效");
+  }
+
+  // 端口验证
+  const portNum = parseInt(port);
+  if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
+    throw new Error("端口必须是 1-65535 之间的数字");
+  }
+
+  // ProxyIP 验证
+  if (!Array.isArray(proxyIPs) || proxyIPs.length === 0) {
+    throw new Error("ProxyIP 列表不能为空");
+  }
+
+  const ipRegex =
+    /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+  for (const ip of proxyIPs) {
+    if (!ipRegex.test(ip)) {
+      throw new Error(`无效的 ProxyIP 地址: ${ip}`);
+    }
+  }
+
+  // 指纹验证
+  const validFingerprints = [
+    "chrome",
+    "firefox",
+    "safari",
+    "randomized",
+    "android",
+    "edge",
+    "360",
+    "qq",
+  ];
+  if (!validFingerprints.includes(fingerprint)) {
+    throw new Error(
+      `无效的指纹类型: ${fingerprint}。支持的类型: ${validFingerprints.join(
+        ", "
+      )}`
+    );
+  }
+
+  // ALPN 验证
+  const validAlpns = ["http/1.1", "h2", "h3", "h2,http/1.1"];
+  if (!validAlpns.includes(alpn)) {
+    throw new Error(
+      `无效的 ALPN 协议: ${alpn}。支持的协议: ${validAlpns.join(", ")}`
+    );
+  }
+
+  // BPB 的 getRandomPath 函数 - 完全照搬 BPB 源码
   function getRandomPath(length) {
     let result = "";
     const characters =
@@ -689,12 +750,12 @@ function generateProxyIPSourceNode(config_data) {
 
   // BPB 的 buildConfig 函数逻辑 - 完全照搬 normalConfigs.js
   const isTLS =
-    port === 443 ||
-    port === 8443 ||
-    port === 2053 ||
-    port === 2083 ||
-    port === 2087 ||
-    port === 2096;
+    portNum === 443 ||
+    portNum === 8443 ||
+    portNum === 2053 ||
+    portNum === 2083 ||
+    portNum === 2087 ||
+    portNum === 2096;
   const security = isTLS ? "tls" : "none";
 
   // BPB 关键：路径生成逻辑
@@ -704,7 +765,9 @@ function generateProxyIPSourceNode(config_data) {
   const fullPath = `/${path}?ed=2560`;
 
   console.log(
-    `生成 BPB ProxyIP 节点: path=${fullPath}, proxyIPs=${proxyIPs.join(",")}`
+    `生成自定义 BPB ProxyIP 节点: path=${fullPath}, proxyIPs=${proxyIPs.join(
+      ","
+    )}, port=${portNum}, fingerprint=${fingerprint}, alpn=${alpn}`
   );
 
   // 直接构建标准格式的URL字符串，确保与v2rayN导出格式完全一致
@@ -726,11 +789,13 @@ function generateProxyIPSourceNode(config_data) {
   const hashPart = `BPB-ProxyIP-${domain}_${domain.replace(/\./g, "%3A")}`;
 
   // 构建完整的标准格式URL
-  const standardUrl = `vless://${uuid}@${domain}:${port}?${params.join(
+  const standardUrl = `vless://${uuid}@${domain}:${portNum}?${params.join(
     "&"
   )}#${encodeURIComponent(hashPart)}`;
 
-  console.log(`生成标准格式ProxyIP节点: ${standardUrl.substring(0, 150)}...`);
+  console.log(
+    `生成自定义标准格式ProxyIP节点: ${standardUrl.substring(0, 150)}...`
+  );
 
   return standardUrl;
 }
@@ -2720,6 +2785,97 @@ export default {
           );
         }
 
+        // 验证配置数据
+        if (node_type === "nat64") {
+          if (!config_data.uuid || !config_data.domain) {
+            return new Response(
+              JSON.stringify({ error: "NAT64 配置需要 uuid 和 domain 参数" }),
+              {
+                status: 400,
+              }
+            );
+          }
+        } else if (node_type === "proxyip") {
+          // ProxyIP 配置验证
+          if (!config_data.uuid || !config_data.domain) {
+            return new Response(
+              JSON.stringify({ error: "ProxyIP 配置需要 uuid 和 domain 参数" }),
+              {
+                status: 400,
+              }
+            );
+          }
+
+          // 关键修复：确保使用当前用户的 UUID
+          if (config_data.uuid !== user.user_uuid) {
+            console.log(
+              `UUID 不匹配：配置中的 UUID ${config_data.uuid} 与用户 UUID ${user.user_uuid} 不一致，自动修正`
+            );
+            config_data.uuid = user.user_uuid;
+          }
+
+          // 验证 ProxyIP 参数
+          if (config_data.proxyIPs && !Array.isArray(config_data.proxyIPs)) {
+            return new Response(
+              JSON.stringify({ error: "proxyIPs 必须是数组格式" }),
+              {
+                status: 400,
+              }
+            );
+          }
+
+          if (config_data.port) {
+            const portNum = parseInt(config_data.port);
+            if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
+              return new Response(
+                JSON.stringify({ error: "端口必须是 1-65535 之间的数字" }),
+                {
+                  status: 400,
+                }
+              );
+            }
+          }
+
+          if (config_data.fingerprint) {
+            const validFingerprints = [
+              "chrome",
+              "firefox",
+              "safari",
+              "randomized",
+              "android",
+              "edge",
+              "360",
+              "qq",
+            ];
+            if (!validFingerprints.includes(config_data.fingerprint)) {
+              return new Response(
+                JSON.stringify({
+                  error: `无效的指纹类型: ${config_data.fingerprint}`,
+                  valid_fingerprints: validFingerprints,
+                }),
+                {
+                  status: 400,
+                }
+              );
+            }
+          }
+
+          if (config_data.alpn) {
+            const validAlpns = ["http/1.1", "h2", "h3", "h2,http/1.1"];
+            if (!validAlpns.includes(config_data.alpn)) {
+              return new Response(
+                JSON.stringify({
+                  error: `无效的 ALPN 协议: ${config_data.alpn}`,
+                  valid_alpns: validAlpns,
+                }),
+                {
+                  status: 400,
+                }
+              );
+            }
+          }
+        }
+
         // 生成源节点
         let generatedNode;
         try {
@@ -2730,11 +2886,15 @@ export default {
               config_data.domain
             );
           } else if (node_type === "proxyip") {
+            // 使用增强的 ProxyIP 生成函数
             generatedNode = generateProxyIPSourceNode(config_data);
           }
         } catch (e) {
           return new Response(
-            JSON.stringify({ error: `生成源节点失败: ${e.message}` }),
+            JSON.stringify({
+              error: `生成源节点失败: ${e.message}`,
+              details: e.stack,
+            }),
             {
               status: 400,
             }
@@ -2781,6 +2941,7 @@ export default {
           JSON.stringify({
             message: "源节点配置创建成功",
             generated_node: generatedNode,
+            config_data: config_data,
           }),
           {
             status: 201,
@@ -2792,6 +2953,119 @@ export default {
         return new Response(
           JSON.stringify({
             error: `创建源节点配置失败: ${e.message}`,
+            details: e.stack,
+          }),
+          {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      }
+    }
+
+    // 路由: 获取 ProxyIP 配置模板 (GET /api/proxyip-config-template) - 受保护
+    if (
+      url.pathname === "/api/proxyip-config-template" &&
+      request.method === "GET"
+    ) {
+      try {
+        const user = await getUserBySession(request, env);
+        if (!user)
+          return new Response(JSON.stringify({ error: "未授权" }), {
+            status: 401,
+          });
+
+        // 返回 ProxyIP 配置模板和验证规则
+        const template = {
+          config_template: {
+            uuid: user.user_uuid, // 强制使用当前用户的 UUID
+            domain: "your-domain.pages.dev",
+            proxyIPs: [DEFAULT_PROXY_IP],
+            port: 443,
+            fingerprint: "randomized",
+            alpn: "http/1.1",
+          },
+          validation_rules: {
+            uuid: {
+              required: true,
+              pattern:
+                "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              description: "有效的 UUID 格式",
+            },
+            domain: {
+              required: true,
+              pattern:
+                "^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$",
+              description: "有效的域名格式",
+            },
+            proxyIPs: {
+              required: true,
+              type: "array",
+              description: "ProxyIP 地址列表，支持多个 IP 地址",
+            },
+            port: {
+              required: false,
+              min: 1,
+              max: 65535,
+              default: 443,
+              description: "端口号 (1-65535)",
+            },
+            fingerprint: {
+              required: false,
+              options: [
+                "chrome",
+                "firefox",
+                "safari",
+                "randomized",
+                "android",
+                "edge",
+                "360",
+                "qq",
+              ],
+              default: "randomized",
+              description: "TLS 指纹类型",
+            },
+            alpn: {
+              required: false,
+              options: ["http/1.1", "h2", "h3", "h2,http/1.1"],
+              default: "http/1.1",
+              description: "ALPN 协议",
+            },
+          },
+          default_values: {
+            proxyIPs: [DEFAULT_PROXY_IP],
+            port: 443,
+            fingerprint: "randomized",
+            alpn: "http/1.1",
+          },
+          examples: {
+            single_proxyip: {
+              uuid: user.user_uuid, // 强制使用当前用户的 UUID
+              domain: "your-domain.pages.dev",
+              proxyIPs: ["129.159.84.71"],
+              port: 443,
+              fingerprint: "randomized",
+              alpn: "http/1.1",
+            },
+            multiple_proxyips: {
+              uuid: user.user_uuid, // 强制使用当前用户的 UUID
+              domain: "your-domain.pages.dev",
+              proxyIPs: ["129.159.84.71", "162.159.192.1"],
+              port: 443,
+              fingerprint: "chrome",
+              alpn: "h2,http/1.1",
+            },
+          },
+        };
+
+        return new Response(JSON.stringify(template), {
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (e) {
+        console.error("获取 ProxyIP 配置模板失败:", e);
+        return new Response(
+          JSON.stringify({
+            error: `获取配置模板失败: ${e.message}`,
           }),
           {
             status: 500,
@@ -2833,6 +3107,97 @@ export default {
           );
         }
 
+        // 验证配置数据
+        if (node_type === "nat64") {
+          if (!config_data.uuid || !config_data.domain) {
+            return new Response(
+              JSON.stringify({ error: "NAT64 配置需要 uuid 和 domain 参数" }),
+              {
+                status: 400,
+              }
+            );
+          }
+        } else if (node_type === "proxyip") {
+          // ProxyIP 配置验证
+          if (!config_data.uuid || !config_data.domain) {
+            return new Response(
+              JSON.stringify({ error: "ProxyIP 配置需要 uuid 和 domain 参数" }),
+              {
+                status: 400,
+              }
+            );
+          }
+
+          // 关键修复：确保使用当前用户的 UUID
+          if (config_data.uuid !== user.user_uuid) {
+            console.log(
+              `UUID 不匹配：配置中的 UUID ${config_data.uuid} 与用户 UUID ${user.user_uuid} 不一致，自动修正`
+            );
+            config_data.uuid = user.user_uuid;
+          }
+
+          // 验证 ProxyIP 参数
+          if (config_data.proxyIPs && !Array.isArray(config_data.proxyIPs)) {
+            return new Response(
+              JSON.stringify({ error: "proxyIPs 必须是数组格式" }),
+              {
+                status: 400,
+              }
+            );
+          }
+
+          if (config_data.port) {
+            const portNum = parseInt(config_data.port);
+            if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
+              return new Response(
+                JSON.stringify({ error: "端口必须是 1-65535 之间的数字" }),
+                {
+                  status: 400,
+                }
+              );
+            }
+          }
+
+          if (config_data.fingerprint) {
+            const validFingerprints = [
+              "chrome",
+              "firefox",
+              "safari",
+              "randomized",
+              "android",
+              "edge",
+              "360",
+              "qq",
+            ];
+            if (!validFingerprints.includes(config_data.fingerprint)) {
+              return new Response(
+                JSON.stringify({
+                  error: `无效的指纹类型: ${config_data.fingerprint}`,
+                  valid_fingerprints: validFingerprints,
+                }),
+                {
+                  status: 400,
+                }
+              );
+            }
+          }
+
+          if (config_data.alpn) {
+            const validAlpns = ["http/1.1", "h2", "h3", "h2,http/1.1"];
+            if (!validAlpns.includes(config_data.alpn)) {
+              return new Response(
+                JSON.stringify({
+                  error: `无效的 ALPN 协议: ${config_data.alpn}`,
+                  valid_alpns: validAlpns,
+                }),
+                {
+                  status: 400,
+                }
+              );
+            }
+          }
+        }
+
         // 生成源节点
         let generatedNode;
         try {
@@ -2843,11 +3208,15 @@ export default {
               config_data.domain
             );
           } else if (node_type === "proxyip") {
+            // 使用增强的 ProxyIP 生成函数
             generatedNode = generateProxyIPSourceNode(config_data);
           }
         } catch (e) {
           return new Response(
-            JSON.stringify({ error: `生成源节点失败: ${e.message}` }),
+            JSON.stringify({
+              error: `生成源节点失败: ${e.message}`,
+              details: e.stack,
+            }),
             {
               status: 400,
             }
@@ -2859,6 +3228,14 @@ export default {
             generated_node: generatedNode,
             node_type: node_type,
             config_data: config_data,
+            validation: {
+              uuid: config_data.uuid,
+              domain: config_data.domain,
+              proxyIPs: config_data.proxyIPs || [DEFAULT_PROXY_IP],
+              port: config_data.port || 443,
+              fingerprint: config_data.fingerprint || "randomized",
+              alpn: config_data.alpn || "http/1.1",
+            },
           }),
           {
             headers: { "Content-Type": "application/json" },
@@ -2869,6 +3246,7 @@ export default {
         return new Response(
           JSON.stringify({
             error: `生成源节点失败: ${e.message}`,
+            details: e.stack,
           }),
           {
             status: 500,
