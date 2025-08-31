@@ -1536,15 +1536,6 @@
       }
 
       // 保存ProxyIP配置（已合并到generateAndSaveProxyIPNode函数中）
-            document.getElementById("proxyip-result-area").style.display =
-              "none";
-          } else {
-            showAlert(`保存失败: ${result.data.error}`, "danger");
-          }
-        } catch (error) {
-          showAlert(`保存失败: ${error.message}`, "danger");
-        }
-      }
 
       // 加载源节点配置
       async function loadSourceNodes() {
