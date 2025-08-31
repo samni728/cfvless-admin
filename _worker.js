@@ -662,14 +662,33 @@ async function getIPv6ProxyAddress(domain) {
 
 // ProxyIP 源节点生成函数 - 基于 BPB 实现，支持用户自定义配置
 function generateProxyIPSourceNode(config_data) {
+  // 兼容前端传递的错误参数名
+  let proxyIPs = config_data.proxyIPs;
+  let port = config_data.port;
+  
+  // 如果前端传递了错误的参数名，进行兼容处理
+  if (!proxyIPs && config_data.proxyIP) {
+    proxyIPs = [config_data.proxyIP]; // 将字符串转换为数组
+    console.log(`兼容处理：将 proxyIP 转换为 proxyIPs: ${JSON.stringify(proxyIPs)}`);
+  }
+  
+  if (!port && config_data.proxyPort) {
+    port = config_data.proxyPort;
+    console.log(`兼容处理：将 proxyPort 转换为 port: ${port}`);
+  }
+  
   const {
     uuid,
     domain,
-    proxyIPs = [DEFAULT_PROXY_IP], // 默认 ProxyIP 地址，用户可自定义
-    port = 443,
+    proxyIPs: defaultProxyIPs = [DEFAULT_PROXY_IP], // 默认 ProxyIP 地址，用户可自定义
+    port: defaultPort = 443,
     fingerprint = "randomized", // 默认指纹，用户可自定义
     alpn = "http/1.1", // 默认 ALPN，用户可自定义
   } = config_data;
+  
+  // 使用兼容处理后的值或默认值
+  proxyIPs = proxyIPs || defaultProxyIPs;
+  port = port || defaultPort;
 
   // 参数验证
   if (!uuid || !domain) {
@@ -2959,8 +2978,10 @@ export default {
               proxyIPs: config_data.proxyIPs,
               domain: config_data.domain,
               node_type: node_type,
-              generated_path: generatedNode.includes('path=') ? generatedNode.split('path=')[1].split('&')[0] : 'N/A'
-            }
+              generated_path: generatedNode.includes("path=")
+                ? generatedNode.split("path=")[1].split("&")[0]
+                : "N/A",
+            },
           }),
           {
             status: 201,
@@ -3272,8 +3293,10 @@ export default {
               proxyIPs: config_data.proxyIPs,
               domain: config_data.domain,
               node_type: node_type,
-              generated_path: generatedNode.includes('path=') ? generatedNode.split('path=')[1].split('&')[0] : 'N/A'
-            }
+              generated_path: generatedNode.includes("path=")
+                ? generatedNode.split("path=")[1].split("&")[0]
+                : "N/A",
+            },
           }),
           {
             headers: { "Content-Type": "application/json" },
