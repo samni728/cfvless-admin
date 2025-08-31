@@ -2797,9 +2797,9 @@ export default {
           }
         } else if (node_type === "proxyip") {
           // ProxyIP 配置验证
-          if (!config_data.uuid || !config_data.domain) {
+          if (!config_data.uuid) {
             return new Response(
-              JSON.stringify({ error: "ProxyIP 配置需要 uuid 和 domain 参数" }),
+              JSON.stringify({ error: "ProxyIP 配置需要 uuid 参数" }),
               {
                 status: 400,
               }
@@ -2812,6 +2812,13 @@ export default {
               `UUID 不匹配：配置中的 UUID ${config_data.uuid} 与用户 UUID ${user.user_uuid} 不一致，自动修正`
             );
             config_data.uuid = user.user_uuid;
+          }
+
+          // 自动获取当前域名
+          if (!config_data.domain) {
+            config_data.domain =
+              request.headers.get("Host") || "your-domain.pages.dev";
+            console.log(`自动获取当前域名: ${config_data.domain}`);
           }
 
           // 验证 ProxyIP 参数
@@ -2979,7 +2986,7 @@ export default {
         const template = {
           config_template: {
             uuid: user.user_uuid, // 强制使用当前用户的 UUID
-            domain: "your-domain.pages.dev",
+            domain: request.headers.get("Host") || "your-domain.pages.dev", // 自动获取当前域名
             proxyIPs: [DEFAULT_PROXY_IP],
             port: 443,
             fingerprint: "randomized",
@@ -2993,10 +3000,10 @@ export default {
               description: "有效的 UUID 格式",
             },
             domain: {
-              required: true,
+              required: false,
               pattern:
                 "^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$",
-              description: "有效的域名格式",
+              description: "有效的域名格式，留空则自动获取当前域名",
             },
             proxyIPs: {
               required: true,
@@ -3041,7 +3048,7 @@ export default {
           examples: {
             single_proxyip: {
               uuid: user.user_uuid, // 强制使用当前用户的 UUID
-              domain: "your-domain.pages.dev",
+              domain: request.headers.get("Host") || "your-domain.pages.dev", // 自动获取当前域名
               proxyIPs: ["129.159.84.71"],
               port: 443,
               fingerprint: "randomized",
@@ -3049,7 +3056,7 @@ export default {
             },
             multiple_proxyips: {
               uuid: user.user_uuid, // 强制使用当前用户的 UUID
-              domain: "your-domain.pages.dev",
+              domain: request.headers.get("Host") || "your-domain.pages.dev", // 自动获取当前域名
               proxyIPs: ["129.159.84.71", "162.159.192.1"],
               port: 443,
               fingerprint: "chrome",
@@ -3119,9 +3126,9 @@ export default {
           }
         } else if (node_type === "proxyip") {
           // ProxyIP 配置验证
-          if (!config_data.uuid || !config_data.domain) {
+          if (!config_data.uuid) {
             return new Response(
-              JSON.stringify({ error: "ProxyIP 配置需要 uuid 和 domain 参数" }),
+              JSON.stringify({ error: "ProxyIP 配置需要 uuid 参数" }),
               {
                 status: 400,
               }
@@ -3134,6 +3141,13 @@ export default {
               `UUID 不匹配：配置中的 UUID ${config_data.uuid} 与用户 UUID ${user.user_uuid} 不一致，自动修正`
             );
             config_data.uuid = user.user_uuid;
+          }
+
+          // 自动获取当前域名
+          if (!config_data.domain) {
+            config_data.domain =
+              request.headers.get("Host") || "your-domain.pages.dev";
+            console.log(`自动获取当前域名: ${config_data.domain}`);
           }
 
           // 验证 ProxyIP 参数
