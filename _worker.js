@@ -3366,7 +3366,10 @@ export default {
                 config_data.domain
               );
             } else if (existingConfig.node_type === "proxyip") {
-              generatedNode = generateProxyIPSourceNode(config_data, config_name);
+              generatedNode = generateProxyIPSourceNode(
+                config_data,
+                config_name
+              );
             }
           } catch (e) {
             return new Response(
@@ -3447,10 +3450,12 @@ export default {
 
     // 路由: 导入源节点到Tag (POST /api/source-nodes/:id/import-to-tag) - 受保护
     if (
-      url.pathname.match(/\/api\/source-nodes\/\d+\/import-to-tag$/) &&
+      url.pathname.includes("/import-to-tag") &&
       request.method === "POST"
     ) {
       try {
+        console.log(`导入到Tag请求: ${url.pathname}`);
+        
         const user = await getUserBySession(request, env);
         if (!user)
           return new Response(JSON.stringify({ error: "未授权" }), {
@@ -3458,6 +3463,8 @@ export default {
           });
 
         const configId = url.pathname.split("/")[3];
+        console.log(`配置ID: ${configId}`);
+        
         if (!configId || isNaN(parseInt(configId))) {
           return new Response(JSON.stringify({ error: "无效的配置ID" }), {
             status: 400,
@@ -3465,6 +3472,7 @@ export default {
         }
 
         const { tag_id } = await request.json();
+        console.log(`目标Tag ID: ${tag_id}`);
 
         // 验证源节点配置所有权
         const sourceConfig = await env.DB.prepare(
@@ -3474,9 +3482,12 @@ export default {
           .first();
 
         if (!sourceConfig) {
-          return new Response(JSON.stringify({ error: "源节点配置不存在或无权限" }), {
-            status: 404,
-          });
+          return new Response(
+            JSON.stringify({ error: "源节点配置不存在或无权限" }),
+            {
+              status: 404,
+            }
+          );
         }
 
         // 如果指定了tag_id，验证tag所有权
@@ -3489,9 +3500,12 @@ export default {
             .first();
 
           if (!tag) {
-            return new Response(JSON.stringify({ error: "指定的Tag不存在或无权限" }), {
-              status: 404,
-            });
+            return new Response(
+              JSON.stringify({ error: "指定的Tag不存在或无权限" }),
+              {
+                status: 404,
+              }
+            );
           }
           targetTagId = tag.id;
         } else {
@@ -3507,7 +3521,12 @@ export default {
             const result = await env.DB.prepare(
               "INSERT INTO tags (user_id, tag_name, tag_uuid, description) VALUES (?, ?, ?, ?)"
             )
-              .bind(user.id, "源节点", crypto.randomUUID(), "系统自动创建的源节点Tag")
+              .bind(
+                user.id,
+                "源节点",
+                crypto.randomUUID(),
+                "系统自动创建的源节点Tag"
+              )
               .run();
             targetTagId = result.meta.last_row_id;
           } else {
