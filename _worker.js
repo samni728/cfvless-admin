@@ -2766,6 +2766,12 @@ export default {
           });
 
         const { config_name, node_type, config_data } = await request.json();
+        
+        // 对于 ProxyIP 类型，强制设置域名为当前域名
+        if (node_type === "proxyip") {
+          config_data.domain = request.headers.get("Host") || "your-domain.pages.dev";
+          console.log(`强制设置域名为当前域名: ${config_data.domain}`);
+        }
 
         if (!config_name || !node_type || !config_data) {
           return new Response(
@@ -2812,13 +2818,6 @@ export default {
               `UUID 不匹配：配置中的 UUID ${config_data.uuid} 与用户 UUID ${user.user_uuid} 不一致，自动修正`
             );
             config_data.uuid = user.user_uuid;
-          }
-
-          // 自动获取当前域名
-          if (!config_data.domain) {
-            config_data.domain =
-              request.headers.get("Host") || "your-domain.pages.dev";
-            console.log(`自动获取当前域名: ${config_data.domain}`);
           }
 
           // 验证 ProxyIP 参数
@@ -3095,6 +3094,12 @@ export default {
           });
 
         const { node_type, config_data } = await request.json();
+        
+        // 对于 ProxyIP 类型，强制设置域名为当前域名
+        if (node_type === "proxyip") {
+          config_data.domain = request.headers.get("Host") || "your-domain.pages.dev";
+          console.log(`强制设置域名为当前域名: ${config_data.domain}`);
+        }
 
         if (!node_type || !config_data) {
           return new Response(
@@ -3141,13 +3146,6 @@ export default {
               `UUID 不匹配：配置中的 UUID ${config_data.uuid} 与用户 UUID ${user.user_uuid} 不一致，自动修正`
             );
             config_data.uuid = user.user_uuid;
-          }
-
-          // 自动获取当前域名
-          if (!config_data.domain) {
-            config_data.domain =
-              request.headers.get("Host") || "your-domain.pages.dev";
-            console.log(`自动获取当前域名: ${config_data.domain}`);
           }
 
           // 验证 ProxyIP 参数
