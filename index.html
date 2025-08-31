@@ -56,6 +56,46 @@
       .ip-version-selector .form-check {
         margin-right: 1rem;
       }
+
+      /* 节点池管理优化样式 */
+      #nodepool-tab-pane .container-fluid {
+        max-width: 100%;
+        padding-left: 0;
+        padding-right: 0;
+      }
+
+      #nodepool-tab-pane .card {
+        border-radius: 0.5rem;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+      }
+
+      #nodepool-tab-pane .card-header {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+        font-weight: 600;
+      }
+
+      /* 确保标签页内容正确隔离 */
+      .tab-pane {
+        display: none;
+      }
+
+      .tab-pane.active {
+        display: block;
+      }
+
+      /* 源节点管理页面优化 */
+      #source-nodes-tab-pane .card {
+        border-radius: 0.5rem;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        margin-bottom: 1.5rem;
+      }
+
+      #source-nodes-tab-pane .card-header {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+        font-weight: 600;
+      }
     </style>
   </head>
   <body>
@@ -774,13 +814,13 @@
           <div class="tab-pane fade" id="source-nodes-tab-pane" role="tabpanel">
             <div class="text-center mb-4 mt-3">
               <h1 class="display-5">🔧 源节点管理</h1>
-              <p class="lead text-muted">NAT64 和 ProxyIP 源节点生成与管理</p>
+              <p class="lead text-muted">ProxyIP 源节点生成与管理</p>
             </div>
 
             <!-- 默认源节点显示区域 -->
             <div class="card mb-4">
               <div class="card-header">
-                <h5 class="mb-0">🌟 默认源节点</h5>
+                <h5 class="mb-0">🌟 系统默认源节点</h5>
                 <small class="text-muted"
                   >系统为您自动创建的基础源节点，可以直接使用或基于它们扩展更多节点</small
                 >
@@ -795,254 +835,113 @@
             </div>
 
             <!-- 源节点配置器 -->
-            <div class="row">
-              <!-- NAT64 源节点配置 -->
-              <div class="col-md-6 mb-4">
-                <div class="card h-100">
-                  <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0">🌐 NAT64 源节点配置</h5>
-                    <small>配置NAT64类型的源节点，保存后自动添加到节点池</small>
-                  </div>
-                  <div class="card-body">
-                    <form id="nat64-form">
-                      <div class="mb-3">
-                        <label for="nat64-name" class="form-label"
-                          >配置名称</label
-                        >
-                        <input
-                          type="text"
-                          class="form-control"
-                          id="nat64-name"
-                          placeholder="例如：我的NAT64节点"
-                        />
-                      </div>
-                      <div class="mb-3">
-                        <label for="nat64-domain" class="form-label"
-                          >域名</label
-                        >
-                        <input
-                          type="text"
-                          class="form-control"
-                          id="nat64-domain"
-                          placeholder="your-worker.workers.dev"
-                          required
-                        />
-                      </div>
-                      <div class="mb-3">
-                        <label for="nat64-uuid" class="form-label">UUID</label>
-                        <div class="input-group">
-                          <input
-                            type="text"
-                            class="form-control"
-                            id="nat64-uuid"
-                            placeholder="点击生成UUID"
-                          />
-                          <button
-                            class="btn btn-outline-secondary"
-                            type="button"
-                            onclick="generateUUID('nat64-uuid')"
-                          >
-                            生成
-                          </button>
-                        </div>
-                      </div>
-                      <div class="mb-3">
-                        <label for="nat64-prefix" class="form-label"
-                          >NAT64前缀</label
-                        >
-                        <select class="form-select" id="nat64-prefix">
-                          <option value="2602:fc59:b0:64::">
-                            2602:fc59:b0:64:: (默认)
-                          </option>
-                          <option value="64:ff9b::">
-                            64:ff9b:: (Google Public)
-                          </option>
-                          <option value="2001:67c:2b0::">
-                            2001:67c:2b0:: (TREX.CZ)
-                          </option>
-                          <option value="2001:67c:27e4:1064::">
-                            2001:67c:27e4:1064:: (go6lab)
-                          </option>
-                        </select>
-                      </div>
-                      <div class="mb-3">
-                        <div class="form-check">
-                          <input
-                            class="form-check-input"
-                            type="checkbox"
-                            id="nat64-auto-fallback"
-                            checked
-                          />
-                          <label
-                            class="form-check-label"
-                            for="nat64-auto-fallback"
-                          >
-                            启用自动回退
-                          </label>
-                        </div>
-                      </div>
-                      <div class="d-grid gap-2">
-                        <button
-                          type="button"
-                          class="btn btn-primary"
-                          onclick="generateNAT64Node()"
-                        >
-                          🔧 配置NAT64源节点
-                        </button>
-                        <button
-                          type="button"
-                          class="btn btn-success"
-                          onclick="saveNAT64Config()"
-                          style="display: none"
-                          id="save-nat64-btn"
-                        >
-                          💾 保存并添加到节点池
-                        </button>
-                      </div>
-                    </form>
-                    <div
-                      class="mt-3"
-                      id="nat64-result-area"
-                      style="display: none"
-                    >
-                      <label for="nat64-result" class="form-label"
-                        >生成的源节点</label
-                      >
-                      <div class="input-group">
-                        <textarea
-                          class="form-control"
-                          id="nat64-result"
-                          rows="3"
-                          readonly
-                        ></textarea>
-                        <button
-                          class="btn btn-outline-primary"
-                          type="button"
-                          onclick="copyToClipboard('nat64-result')"
-                        >
-                          📋
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+            <div class="card mb-4">
+              <div class="card-header bg-success text-white">
+                <h5 class="mb-0">🌍 源节点配置</h5>
+                <small>配置ProxyIP类型的源节点，支持自定义IP地址和参数</small>
               </div>
-
-              <!-- ProxyIP 源节点配置 -->
-              <div class="col-md-6 mb-4">
-                <div class="card h-100">
-                  <div class="card-header bg-success text-white">
-                    <h5 class="mb-0">🌍 ProxyIP 源节点配置</h5>
-                    <small
-                      >配置ProxyIP类型的源节点，保存后自动添加到节点池</small
+              <div class="card-body">
+                <form id="proxyip-form">
+                  <div class="mb-3">
+                    <label for="proxyip-name" class="form-label"
+                      >配置名称</label
                     >
+                    <input
+                      type="text"
+                      class="form-control"
+                      id="proxyip-name"
+                      placeholder="例如：我的ProxyIP节点"
+                    />
                   </div>
-                  <div class="card-body">
-                    <form id="proxyip-form">
-                      <div class="mb-3">
-                        <label for="proxyip-name" class="form-label"
-                          >配置名称</label
-                        >
-                        <input
-                          type="text"
-                          class="form-control"
-                          id="proxyip-name"
-                          placeholder="例如：我的ProxyIP节点"
-                        />
-                      </div>
-                      <!-- 域名字段已隐藏，系统自动获取当前域名 -->
-                      <input type="hidden" id="proxyip-domain" />
-                      <div class="mb-3">
-                        <label for="proxyip-uuid" class="form-label"
-                          >UUID</label
-                        >
-                        <div class="input-group">
-                          <input
-                            type="text"
-                            class="form-control"
-                            id="proxyip-uuid"
-                            placeholder="点击生成UUID"
-                          />
-                          <button
-                            class="btn btn-outline-secondary"
-                            type="button"
-                            onclick="generateUUID('proxyip-uuid')"
-                          >
-                            生成
-                          </button>
-                        </div>
-                      </div>
-                      <div class="mb-3">
-                        <label for="proxyip-address" class="form-label"
-                          >代理IP地址</label
-                        >
-                        <div class="input-group">
-                          <input
-                            type="text"
-                            class="form-control"
-                            id="proxyip-address"
-                            placeholder="例如：164.90.228.172"
-                          />
-                          <button
-                            class="btn btn-outline-info"
-                            type="button"
-                            onclick="openProxyIPSelector()"
-                            title="获取可用代理IP"
-                          >
-                            🌐 获取代理IP
-                          </button>
-                        </div>
-                        <div class="form-text">
-                          点击"获取代理IP"按钮测试可用IP，选择您想要的落地地区
-                        </div>
-                      </div>
-                      <div class="mb-3">
-                        <label for="proxyip-port" class="form-label"
-                          >🔌 HTTPS端口选择</label
-                        >
-                        <select class="form-control" id="proxyip-port">
-                          <option value="443">443</option>
-                          <option value="2053">2053</option>
-                          <option value="2083">2083</option>
-                          <option value="2087">2087</option>
-                          <option value="2096">2096</option>
-                          <option value="8443">8443</option>
-                        </select>
-                      </div>
-                      <div class="d-grid gap-2">
-                        <button
-                          type="button"
-                          class="btn btn-success"
-                          onclick="generateAndSaveProxyIPNode()"
-                        >
-                          🔧 配置ProxyIP源节点
-                        </button>
-                      </div>
-                    </form>
-                    <div
-                      class="mt-3"
-                      id="proxyip-result-area"
-                      style="display: none"
-                    >
-                      <label for="proxyip-result" class="form-label"
-                        >生成的源节点</label
+                  <!-- 域名字段已隐藏，系统自动获取当前域名 -->
+                  <input type="hidden" id="proxyip-domain" />
+                  <div class="mb-3">
+                    <label for="proxyip-uuid" class="form-label">UUID</label>
+                    <div class="input-group">
+                      <input
+                        type="text"
+                        class="form-control"
+                        id="proxyip-uuid"
+                        placeholder="点击生成UUID"
+                      />
+                      <button
+                        class="btn btn-outline-secondary"
+                        type="button"
+                        onclick="generateUUID('proxyip-uuid')"
                       >
-                      <div class="input-group">
-                        <textarea
-                          class="form-control"
-                          id="proxyip-result"
-                          rows="3"
-                          readonly
-                        ></textarea>
-                        <button
-                          class="btn btn-outline-primary"
-                          type="button"
-                          onclick="copyToClipboard('proxyip-result')"
-                        >
-                          📋
-                        </button>
-                      </div>
+                        生成
+                      </button>
                     </div>
+                  </div>
+                  <div class="mb-3">
+                    <label for="proxyip-address" class="form-label"
+                      >代理IP地址</label
+                    >
+                    <div class="input-group">
+                      <input
+                        type="text"
+                        class="form-control"
+                        id="proxyip-address"
+                        placeholder="例如：164.90.228.172"
+                      />
+                      <button
+                        class="btn btn-outline-info"
+                        type="button"
+                        onclick="openProxyIPSelector()"
+                        title="获取可用代理IP"
+                      >
+                        🌐 获取代理IP
+                      </button>
+                    </div>
+                    <div class="form-text">
+                      点击"获取代理IP"按钮测试可用IP，选择您想要的落地地区
+                    </div>
+                  </div>
+                  <div class="mb-3">
+                    <label for="proxyip-port" class="form-label"
+                      >🔌 HTTPS端口选择</label
+                    >
+                    <select class="form-control" id="proxyip-port">
+                      <option value="443">443</option>
+                      <option value="2053">2053</option>
+                      <option value="2083">2083</option>
+                      <option value="2087">2087</option>
+                      <option value="2096">2096</option>
+                      <option value="8443">8443</option>
+                    </select>
+                  </div>
+                  <div class="d-grid gap-2">
+                    <button
+                      type="button"
+                      class="btn btn-success"
+                      onclick="generateAndSaveProxyIPNode()"
+                    >
+                      🔧 配置源节点
+                    </button>
+                  </div>
+                </form>
+                <div
+                  class="mt-3"
+                  id="proxyip-result-area"
+                  style="display: none"
+                >
+                  <label for="proxyip-result" class="form-label"
+                    >生成的源节点</label
+                  >
+                  <div class="input-group">
+                    <textarea
+                      class="form-control"
+                      id="proxyip-result"
+                      rows="3"
+                      readonly
+                    ></textarea>
+                    <button
+                      class="btn btn-outline-primary"
+                      type="button"
+                      onclick="copyToClipboard('proxyip-result')"
+                    >
+                      📋
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1073,71 +972,75 @@
 
           <!-- Node Pool Tab -->
           <div class="tab-pane fade" id="nodepool-tab-pane" role="tabpanel">
-            <div class="card mt-3">
-              <div
-                class="card-header d-flex justify-content-between align-items-center"
-              >
-                <span>🎯 我的节点池</span>
-                <div>
-                  <span id="node-count-badge" class="badge bg-info me-2"
-                    >总计: 0</span
-                  >
-                  <button
-                    class="btn btn-outline-primary btn-sm"
-                    onclick="refreshAllSources()"
-                  >
-                    🔄 刷新所有源
-                  </button>
+            <div class="container-fluid px-0">
+              <div class="card mt-3">
+                <div
+                  class="card-header d-flex justify-content-between align-items-center"
+                >
+                  <span>🎯 我的节点池</span>
+                  <div>
+                    <span id="node-count-badge" class="badge bg-info me-2"
+                      >总计: 0</span
+                    >
+                    <button
+                      class="btn btn-outline-primary btn-sm"
+                      onclick="refreshAllSources()"
+                    >
+                      🔄 刷新所有源
+                    </button>
+                  </div>
                 </div>
-              </div>
-              <div class="card-body">
-                <div class="row mb-3">
-                  <div class="col-md-6">
-                    <div class="input-group">
-                      <span class="input-group-text">🔍</span>
-                      <input
-                        type="text"
-                        class="form-control"
-                        id="node-search"
-                        placeholder="搜索节点名称或来源..."
-                        oninput="filterNodes()"
-                      />
+                <div class="card-body">
+                  <div class="row mb-3">
+                    <div class="col-md-6">
+                      <div class="input-group">
+                        <span class="input-group-text">🔍</span>
+                        <input
+                          type="text"
+                          class="form-control"
+                          id="node-search"
+                          placeholder="搜索节点名称或来源..."
+                          oninput="filterNodes()"
+                        />
+                      </div>
+                    </div>
+                    <div class="col-md-3">
+                      <select
+                        class="form-select"
+                        id="source-filter"
+                        onchange="filterNodes()"
+                      >
+                        <option value="">所有来源</option>
+                      </select>
+                    </div>
+                    <div class="col-md-3">
+                      <select
+                        class="form-select"
+                        id="protocol-filter"
+                        onchange="filterNodes()"
+                      >
+                        <option value="">所有协议</option>
+                        <option value="vmess">VMess</option>
+                        <option value="vless">VLESS</option>
+                        <option value="trojan">Trojan</option>
+                        <option value="ss">Shadowsocks</option>
+                      </select>
                     </div>
                   </div>
-                  <div class="col-md-3">
-                    <select
-                      class="form-select"
-                      id="source-filter"
-                      onchange="filterNodes()"
-                    >
-                      <option value="">所有来源</option>
-                    </select>
-                  </div>
-                  <div class="col-md-3">
-                    <select
-                      class="form-select"
-                      id="protocol-filter"
-                      onchange="filterNodes()"
-                    >
-                      <option value="">所有协议</option>
-                      <option value="vmess">VMess</option>
-                      <option value="vless">VLESS</option>
-                      <option value="trojan">Trojan</option>
-                      <option value="ss">Shadowsocks</option>
-                    </select>
-                  </div>
-                </div>
 
-                <div id="node-pool-list" class="list-group">
-                  <div class="text-center p-3 text-muted">正在加载节点...</div>
-                </div>
+                  <div id="node-pool-list" class="list-group">
+                    <div class="text-center p-3 text-muted">
+                      正在加载节点...
+                    </div>
+                  </div>
 
-                <nav aria-label="节点分页" class="mt-3">
-                  <ul
-                    class="pagination justify-content-center"
-                    id="node-pagination"
-                  ></ul>
-                </nav>
+                  <nav aria-label="节点分页" class="mt-3">
+                    <ul
+                      class="pagination justify-content-center"
+                      id="node-pagination"
+                    ></ul>
+                  </nav>
+                </div>
               </div>
             </div>
           </div>
@@ -1328,9 +1231,7 @@
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title" id="importToTagModalLabel">
-              🏷️ 导入到Tag
-            </h5>
+            <h5 class="modal-title" id="importToTagModalLabel">🏷️ 导入到Tag</h5>
             <button
               type="button"
               class="btn-close"
@@ -1543,52 +1444,12 @@
         document.getElementById(inputId).value = uuid;
       }
 
-      // NAT64源节点生成
-      async function generateNAT64Node() {
-        const config = {
-          uuid: document.getElementById("nat64-uuid").value,
-          domain: document.getElementById("nat64-domain").value,
-          nat64Prefix: document.getElementById("nat64-prefix").value,
-          autoFallback: document.getElementById("nat64-auto-fallback").checked,
-        };
-
-        if (!config.uuid) {
-          generateUUID("nat64-uuid");
-          config.uuid = document.getElementById("nat64-uuid").value;
-        }
-
-        if (!config.domain) {
-          showAlert("请输入域名", "danger");
-          return;
-        }
-
-        try {
-          const result = await apiRequest("/api/generate-source-node", "POST", {
-            node_type: "nat64",
-            config_data: config,
-          });
-
-          if (result.ok) {
-            document.getElementById("nat64-result").value =
-              result.data.generated_node;
-            document.getElementById("nat64-result-area").style.display =
-              "block";
-            document.getElementById("save-nat64-btn").style.display = "block";
-            showAlert(
-              "NAT64源节点配置成功！点击保存将自动添加到节点池",
-              "success"
-            );
-          } else {
-            showAlert(`配置失败: ${result.data.error}`, "danger");
-          }
-        } catch (error) {
-          showAlert(`生成失败: ${error.message}`, "danger");
-        }
-      }
+      // NAT64源节点生成（已移除）
 
       // ProxyIP源节点生成并保存（简化流程）
       async function generateAndSaveProxyIPNode() {
-        const configName = document.getElementById("proxyip-name").value || "ProxyIP配置";
+        const configName =
+          document.getElementById("proxyip-name").value || "ProxyIP配置";
         const config = {
           uuid: document.getElementById("proxyip-uuid").value,
           proxyIP: document.getElementById("proxyip-address").value,
@@ -1633,56 +1494,32 @@
         }
       }
 
-      // 保存NAT64配置
-      async function saveNAT64Config() {
-        const configName =
-          document.getElementById("nat64-name").value || "NAT64配置";
-        const config = {
-          uuid: document.getElementById("nat64-uuid").value,
-          domain: document.getElementById("nat64-domain").value,
-          nat64Prefix: document.getElementById("nat64-prefix").value,
-          autoFallback: document.getElementById("nat64-auto-fallback").checked,
-        };
-
-        try {
-          const result = await apiRequest("/api/source-nodes", "POST", {
-            config_name: configName,
-            node_type: "nat64",
-            config_data: config,
-          });
-
-          if (result.ok) {
-            showAlert("NAT64源节点已保存并添加到节点池！", "success");
-            document.getElementById("save-nat64-btn").style.display = "none";
-            refreshSourceNodes();
-            // 清空表单
-            document.getElementById("nat64-form").reset();
-            document.getElementById("nat64-result-area").style.display = "none";
-          } else {
-            showAlert(`保存失败: ${result.data.error}`, "danger");
-          }
-        } catch (error) {
-          showAlert(`保存失败: ${error.message}`, "danger");
-        }
-      }
+      // 保存NAT64配置（已移除）
 
       // 保存ProxyIP配置（已合并到generateAndSaveProxyIPNode函数中）
 
       // ProxyIP选择器相关函数
       function openProxyIPSelector() {
-        const modal = new bootstrap.Modal(document.getElementById('proxyIPSelectorModal'));
+        const modal = new bootstrap.Modal(
+          document.getElementById("proxyIPSelectorModal")
+        );
         modal.show();
       }
 
       function openProxyIPTestPage() {
         // 打开itdog.cn的测试页面
-        window.open('https://www.itdog.cn/tcping/bpb.yousef.isegaro.com:443', '_blank');
-        
+        window.open(
+          "https://www.itdog.cn/tcping/bpb.yousef.isegaro.com:443",
+          "_blank"
+        );
+
         // 显示提示信息
-        showAlert('测试页面已在新窗口打开，请按照说明操作', 'info');
-        
+        showAlert("测试页面已在新窗口打开，请按照说明操作", "info");
+
         // 关闭弹窗
-        const modal = bootstrap.Modal.getInstance(document.getElementById('proxyIPSelectorModal'));
+        const modal = bootstrap.Modal.getInstance(
+          document.getElementById("proxyIPSelectorModal")
+        );
         if (modal) {
           modal.hide();
         }
@@ -1708,8 +1545,16 @@
 
       // 显示源节点配置
       function displaySourceNodes(configs) {
-        const defaultNodes = configs.filter((config) => config.is_default);
-        const customNodes = configs.filter((config) => !config.is_default);
+        // 过滤掉NAT64节点，只显示ProxyIP节点
+        const proxyipConfigs = configs.filter(
+          (config) => config.node_type === "proxyip"
+        );
+        const defaultNodes = proxyipConfigs.filter(
+          (config) => config.is_default
+        );
+        const customNodes = proxyipConfigs.filter(
+          (config) => !config.is_default
+        );
 
         // 显示默认源节点
         displayDefaultNodes(defaultNodes);
@@ -1724,8 +1569,8 @@
 
         if (defaultNodes.length === 0) {
           container.innerHTML = `
-                    <div class="alert alert-warning">
-                        <h6>🔧 还没有默认源节点</h6>
+                    <div class="alert alert-info">
+                        <h6>🌍 还没有系统默认源节点</h6>
                         <p class="mb-0">系统会在用户注册时自动创建默认源节点。如果您是老用户，请联系管理员。</p>
                     </div>
                 `;
@@ -1736,8 +1581,7 @@
           .map((node) => {
             const configData = JSON.parse(node.config_data);
             const nodeType = node.node_type.toUpperCase();
-            const badgeClass =
-              node.node_type === "nat64" ? "bg-primary" : "bg-success";
+            const badgeClass = "bg-success";
 
             return `
                     <div class="card mb-2">
@@ -1747,7 +1591,7 @@
                                     <h6 class="card-title">
                                         ${node.config_name} 
                                         <span class="badge ${badgeClass}">${nodeType}</span>
-                                        <span class="badge bg-info">默认</span>
+                                        <span class="badge bg-info">系统默认</span>
                                     </h6>
                                     <small class="text-muted">域名: ${configData.domain}</small>
                                 </div>
@@ -1774,7 +1618,7 @@
           container.innerHTML = `
                     <div class="text-center p-3 text-muted">
                         <p>还没有自定义源节点配置</p>
-                        <p>使用上方的生成器创建您的第一个源节点配置吧！</p>
+                        <p>使用上方的源节点配置器创建您的第一个源节点配置吧！</p>
                     </div>
                 `;
           return;
@@ -1784,8 +1628,7 @@
           .map((node) => {
             const configData = JSON.parse(node.config_data);
             const nodeType = node.node_type.toUpperCase();
-            const badgeClass =
-              node.node_type === "nat64" ? "bg-primary" : "bg-success";
+            const badgeClass = "bg-success";
             const statusBadge = node.enabled
               ? '<span class="badge bg-success">启用</span>'
               : '<span class="badge bg-secondary">禁用</span>';
@@ -1811,7 +1654,11 @@
                                     <button class="btn btn-outline-primary" onclick="copyToClipboard('custom-node-${
                                       node.id
                                     }')">📋</button>
-                                    <button class="btn btn-outline-success" onclick="importToTag(${node.id}, '${node.config_name}')">🏷️ 导入到Tag</button>
+                                    <button class="btn btn-outline-success" onclick="importToTag(${
+                                      node.id
+                                    }, '${
+              node.config_name
+            }')">🏷️ 导入到Tag</button>
                                     <button class="btn btn-outline-danger" onclick="deleteSourceNode(${
                                       node.id
                                     }, '${node.config_name}')">🗑️</button>
@@ -1838,12 +1685,14 @@
       function importToTag(nodeId, nodeName) {
         currentImportNodeId = nodeId;
         currentImportNodeName = nodeName;
-        
+
         // 加载用户的所有Tag
         loadTagsForImport();
-        
+
         // 显示模态框
-        const modal = new bootstrap.Modal(document.getElementById('importToTagModal'));
+        const modal = new bootstrap.Modal(
+          document.getElementById("importToTagModal")
+        );
         modal.show();
       }
 
@@ -1853,11 +1702,12 @@
           if (result.ok && Array.isArray(result.data)) {
             const select = document.getElementById("importTagSelect");
             // 保留默认选项
-            select.innerHTML = '<option value="">默认导入到"源节点"Tag</option>';
-            
+            select.innerHTML =
+              '<option value="">默认导入到"源节点"Tag</option>';
+
             // 添加用户的所有Tag
-            result.data.forEach(tag => {
-              const option = document.createElement('option');
+            result.data.forEach((tag) => {
+              const option = document.createElement("option");
               option.value = tag.id;
               option.textContent = `🏷️ ${tag.tag_name}`;
               select.appendChild(option);
@@ -1870,23 +1720,37 @@
 
       async function confirmImportToTag() {
         if (!currentImportNodeId) {
-          showAlert("导入失败：节点ID无效", "danger", document.getElementById("import-tag-alert"));
+          showAlert(
+            "导入失败：节点ID无效",
+            "danger",
+            document.getElementById("import-tag-alert")
+          );
           return;
         }
 
         const tagId = document.getElementById("importTagSelect").value;
-        
+
         try {
-          const result = await apiRequest(`/api/source-nodes/${currentImportNodeId}/import-to-tag`, "POST", {
-            tag_id: tagId || null
-          });
+          const result = await apiRequest(
+            `/api/source-nodes/${currentImportNodeId}/import-to-tag`,
+            "POST",
+            {
+              tag_id: tagId || null,
+            }
+          );
 
           if (result.ok) {
-            showAlert(`源节点"${currentImportNodeName}"已成功导入到Tag！`, "success", document.getElementById("import-tag-alert"));
-            
+            showAlert(
+              `源节点"${currentImportNodeName}"已成功导入到Tag！`,
+              "success",
+              document.getElementById("import-tag-alert")
+            );
+
             // 关闭模态框
             setTimeout(() => {
-              const modal = bootstrap.Modal.getInstance(document.getElementById('importToTagModal'));
+              const modal = bootstrap.Modal.getInstance(
+                document.getElementById("importToTagModal")
+              );
               if (modal) {
                 modal.hide();
               }
@@ -1894,14 +1758,22 @@
               loadTags();
             }, 1500);
           } else {
-            showAlert(`导入失败: ${result.data.error}`, "danger", document.getElementById("import-tag-alert"));
+            showAlert(
+              `导入失败: ${result.data.error}`,
+              "danger",
+              document.getElementById("import-tag-alert")
+            );
           }
         } catch (error) {
-          showAlert(`导入失败: ${error.message}`, "danger", document.getElementById("import-tag-alert"));
+          showAlert(
+            `导入失败: ${error.message}`,
+            "danger",
+            document.getElementById("import-tag-alert")
+          );
         }
       }
 
-      // 导入到生成器（保留原有功能）
+      // 导入到生成器（已简化，仅支持ProxyIP）
       function importToGenerator(nodeUrl, nodeType) {
         // 解析节点URL获取配置信息
         try {
@@ -1909,18 +1781,11 @@
           const uuid = url.username;
           const domain = url.hostname;
 
-          if (nodeType === "nat64") {
-            document.getElementById("nat64-uuid").value = uuid;
-            document.getElementById("nat64-domain").value = domain;
-            // 切换到源节点管理标签页
-            document.getElementById("source-nodes-tab").click();
-            showAlert("已导入到NAT64生成器", "success");
-          } else if (nodeType === "proxyip") {
+          if (nodeType === "proxyip") {
             document.getElementById("proxyip-uuid").value = uuid;
-            document.getElementById("proxyip-domain").value = domain;
             // 切换到源节点管理标签页
             document.getElementById("source-nodes-tab").click();
-            showAlert("已导入到ProxyIP生成器", "success");
+            showAlert("已导入到源节点生成器", "success");
           }
         } catch (error) {
           showAlert("导入失败：节点格式无效", "danger");
@@ -1994,12 +1859,7 @@
                         <button class="btn btn-outline-light" onclick="logout()">登出</button>
                     `;
           }
-          // 自动设置当前域名
-          const currentDomain = window.location.hostname;
-          const proxyipDomainInput = document.getElementById("proxyip-domain");
-          const nat64DomainInput = document.getElementById("nat64-domain");
-          if (proxyipDomainInput) proxyipDomainInput.value = currentDomain;
-          if (nat64DomainInput) nat64DomainInput.value = currentDomain;
+          // 自动设置当前域名（已移除NAT64相关设置）
 
           // 加载数据
           loadTags();
