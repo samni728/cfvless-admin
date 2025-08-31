@@ -950,19 +950,8 @@
                           placeholder="例如：我的ProxyIP节点"
                         />
                       </div>
-                      <div class="mb-3">
-                        <label for="proxyip-domain" class="form-label"
-                          >域名</label
-                        >
-                        <input
-                          type="text"
-                          class="form-control"
-                          id="proxyip-domain"
-                          placeholder="自动获取当前域名"
-                          required
-                          readonly
-                        />
-                      </div>
+                      <!-- 域名字段已隐藏，系统自动获取当前域名 -->
+                      <input type="hidden" id="proxyip-domain" />
                       <div class="mb-3">
                         <label for="proxyip-uuid" class="form-label"
                           >UUID</label
@@ -1012,18 +1001,9 @@
                         <button
                           type="button"
                           class="btn btn-success"
-                          onclick="generateProxyIPNode()"
+                          onclick="generateAndSaveProxyIPNode()"
                         >
                           🔧 配置ProxyIP源节点
-                        </button>
-                        <button
-                          type="button"
-                          class="btn btn-primary"
-                          onclick="saveProxyIPConfig()"
-                          style="display: none"
-                          id="save-proxyip-btn"
-                        >
-                          💾 保存并添加到节点池
                         </button>
                       </div>
                     </form>
@@ -1475,46 +1455,50 @@
         }
       }
 
-      // ProxyIP源节点生成
-      async function generateProxyIPNode() {
+      // ProxyIP源节点生成并保存（简化流程）
+      async function generateAndSaveProxyIPNode() {
+        const configName = document.getElementById("proxyip-name").value || "ProxyIP配置";
         const config = {
           uuid: document.getElementById("proxyip-uuid").value,
-          domain: document.getElementById("proxyip-domain").value,
           proxyIP: document.getElementById("proxyip-address").value,
           proxyPort: document.getElementById("proxyip-port").value,
         };
 
+        // 自动生成UUID（如果没有）
         if (!config.uuid) {
           generateUUID("proxyip-uuid");
           config.uuid = document.getElementById("proxyip-uuid").value;
         }
 
-        if (!config.domain) {
-          showAlert("请输入域名", "danger");
+        // 验证必填字段
+        if (!config.proxyIP) {
+          showAlert("请输入代理IP地址", "danger");
           return;
         }
 
         try {
-          const result = await apiRequest("/api/generate-source-node", "POST", {
+          // 直接保存配置（域名由后端自动获取）
+          const result = await apiRequest("/api/source-nodes", "POST", {
+            config_name: configName,
             node_type: "proxyip",
             config_data: config,
           });
 
           if (result.ok) {
-            document.getElementById("proxyip-result").value =
-              result.data.generated_node;
-            document.getElementById("proxyip-result-area").style.display =
-              "block";
-            document.getElementById("save-proxyip-btn").style.display = "block";
-            showAlert(
-              "ProxyIP源节点配置成功！点击保存将自动添加到节点池",
-              "success"
-            );
+            showAlert("ProxyIP源节点配置成功并已添加到节点池！", "success");
+            refreshSourceNodes();
+            // 清空表单
+            document.getElementById("proxyip-form").reset();
+            // 隐藏结果区域（如果存在）
+            const resultArea = document.getElementById("proxyip-result-area");
+            if (resultArea) {
+              resultArea.style.display = "none";
+            }
           } else {
             showAlert(`配置失败: ${result.data.error}`, "danger");
           }
         } catch (error) {
-          showAlert(`生成失败: ${error.message}`, "danger");
+          showAlert(`配置失败: ${error.message}`, "danger");
         }
       }
 
@@ -1551,30 +1535,7 @@
         }
       }
 
-      // 保存ProxyIP配置
-      async function saveProxyIPConfig() {
-        const configName =
-          document.getElementById("proxyip-name").value || "ProxyIP配置";
-        const config = {
-          uuid: document.getElementById("proxyip-uuid").value,
-          domain: document.getElementById("proxyip-domain").value,
-          proxyIP: document.getElementById("proxyip-address").value,
-          proxyPort: document.getElementById("proxyip-port").value,
-        };
-
-        try {
-          const result = await apiRequest("/api/source-nodes", "POST", {
-            config_name: configName,
-            node_type: "proxyip",
-            config_data: config,
-          });
-
-          if (result.ok) {
-            showAlert("ProxyIP源节点已保存并添加到节点池！", "success");
-            document.getElementById("save-proxyip-btn").style.display = "none";
-            refreshSourceNodes();
-            // 清空表单
-            document.getElementById("proxyip-form").reset();
+      // 保存ProxyIP配置（已合并到generateAndSaveProxyIPNode函数中）
             document.getElementById("proxyip-result-area").style.display =
               "none";
           } else {

@@ -665,18 +665,20 @@ function generateProxyIPSourceNode(config_data) {
   // 兼容前端传递的错误参数名
   let proxyIPs = config_data.proxyIPs;
   let port = config_data.port;
-  
+
   // 如果前端传递了错误的参数名，进行兼容处理
   if (!proxyIPs && config_data.proxyIP) {
     proxyIPs = [config_data.proxyIP]; // 将字符串转换为数组
-    console.log(`兼容处理：将 proxyIP 转换为 proxyIPs: ${JSON.stringify(proxyIPs)}`);
+    console.log(
+      `兼容处理：将 proxyIP 转换为 proxyIPs: ${JSON.stringify(proxyIPs)}`
+    );
   }
-  
+
   if (!port && config_data.proxyPort) {
     port = config_data.proxyPort;
     console.log(`兼容处理：将 proxyPort 转换为 port: ${port}`);
   }
-  
+
   const {
     uuid,
     domain,
@@ -685,7 +687,7 @@ function generateProxyIPSourceNode(config_data) {
     fingerprint = "randomized", // 默认指纹，用户可自定义
     alpn = "http/1.1", // 默认 ALPN，用户可自定义
   } = config_data;
-  
+
   // 使用兼容处理后的值或默认值
   proxyIPs = proxyIPs || defaultProxyIPs;
   port = port || defaultPort;

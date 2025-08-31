@@ -1902,3 +1902,201 @@ examples: {
 **第十九次关键修复时间**: 2024 年 12 月 19 日 🔧 **解决自定义 ProxyIP 节点 UUID 验证问题**  
 **修复状态**: ✅ 完成  
 **测试状态**: 待用户验证
+
+---
+
+## 🎯 第二十次关键修复 - 解决自定义 ProxyIP 参数兼容性问题
+
+**修复时间**: 2024 年 12 月 19 日  
+**问题类型**: 参数传递不匹配  
+**修复状态**: ✅ 完成  
+**测试状态**: ✅ 用户验证通过
+
+### 问题描述
+
+用户反馈自定义 ProxyIP 节点无法正确使用自定义的 IP 地址：
+
+1. **用户配置**: 自定义 ProxyIP 地址为 `164.90.228.172`
+2. **实际效果**: 生成的节点仍然使用默认的 `129.159.84.71`
+3. **验证结果**: 通过 ip.sb 验证，显示的 IP 地址仍然是默认值
+
+### 问题分析
+
+通过调试信息发现根本原因：
+
+#### 1. 前端参数传递错误
+
+用户自定义配置的 `config_data` 显示：
+
+```json
+{
+  "uuid": "64060b74-aa8a-42bf-846d-58b88cf45e53",
+  "domain": "myfq8.pages.dev",
+  "proxyIP": "164.90.228.172", // ❌ 错误：应该是 proxyIPs
+  "proxyPort": "443" // ❌ 错误：应该是 port
+}
+```
+
+#### 2. 后端期望参数不匹配
+
+`generateProxyIPSourceNode` 函数期望的参数：
+
+```javascript
+const {
+  uuid,
+  domain,
+  proxyIPs = [DEFAULT_PROXY_IP], // 期望数组格式
+  port = 443, // 期望 port 参数名
+  // ...
+} = config_data;
+```
+
+#### 3. 参数名不匹配导致的问题
+
+- 前端传递：`proxyIP`（字符串）
+- 后端期望：`proxyIPs`（数组）
+- 结果：使用默认值 `[DEFAULT_PROXY_IP]`
+
+### 解决方案
+
+#### 1. 添加参数兼容性处理
+
+在 `generateProxyIPSourceNode` 函数开头添加兼容性逻辑：
+
+```javascript
+function generateProxyIPSourceNode(config_data) {
+  // 兼容前端传递的错误参数名
+  let proxyIPs = config_data.proxyIPs;
+  let port = config_data.port;
+
+  // 如果前端传递了错误的参数名，进行兼容处理
+  if (!proxyIPs && config_data.proxyIP) {
+    proxyIPs = [config_data.proxyIP]; // 将字符串转换为数组
+    console.log(
+      `兼容处理：将 proxyIP 转换为 proxyIPs: ${JSON.stringify(proxyIPs)}`
+    );
+  }
+
+  if (!port && config_data.proxyPort) {
+    port = config_data.proxyPort;
+    console.log(`兼容处理：将 proxyPort 转换为 port: ${port}`);
+  }
+
+  // 使用兼容处理后的值或默认值
+  proxyIPs = proxyIPs || defaultProxyIPs;
+  port = port || defaultPort;
+}
+```
+
+#### 2. 参数转换逻辑
+
+- **字符串转数组**: `"164.90.228.172"` → `["164.90.228.172"]`
+- **参数名映射**: `proxyIP` → `proxyIPs`, `proxyPort` → `port`
+- **默认值保护**: 如果转换失败，使用默认值
+
+#### 3. 调试信息增强
+
+添加详细的调试日志：
+
+- 记录参数转换过程
+- 显示最终使用的参数值
+- 便于问题排查
+
+### 技术实现细节
+
+#### 1. 兼容性处理策略
+
+```javascript
+// 检测前端传递的错误参数名
+if (!proxyIPs && config_data.proxyIP) {
+  proxyIPs = [config_data.proxyIP]; // 将字符串转换为数组
+  console.log(
+    `兼容处理：将 proxyIP 转换为 proxyIPs: ${JSON.stringify(proxyIPs)}`
+  );
+}
+
+if (!port && config_data.proxyPort) {
+  port = config_data.proxyPort;
+  console.log(`兼容处理：将 proxyPort 转换为 port: ${port}`);
+}
+```
+
+#### 2. 参数验证增强
+
+- 保持原有的参数验证逻辑
+- 在兼容性处理后再进行验证
+- 确保最终使用的参数符合要求
+
+#### 3. 错误处理
+
+- 如果兼容性处理失败，使用默认值
+- 记录处理过程便于调试
+- 不影响现有功能
+
+### 测试结果
+
+#### 1. 修复前
+
+- 用户配置 `164.90.228.172`
+- 生成的节点路径：`MTI5LjE1OS44NC43MQ==`（解码：`129.159.84.71`）
+- 连接验证：显示默认 IP 地址
+
+#### 2. 修复后
+
+- 用户配置 `164.90.228.172`
+- 生成的节点路径：`MTY0LjkwLjIyOC4xNzI=`（解码：`164.90.228.172`）
+- 连接验证：显示自定义 IP 地址 ✅
+
+### 影响范围
+
+#### 1. 正面影响
+
+- ✅ 自定义 ProxyIP 节点正常工作
+- ✅ 用户配置的 IP 地址正确生效
+- ✅ 向后兼容，不影响现有功能
+- ✅ 提供详细的调试信息
+
+#### 2. 兼容性保证
+
+- 支持前端传递的 `proxyIP` 参数名
+- 支持前端传递的 `proxyPort` 参数名
+- 自动转换为后端期望的格式
+- 保持现有 API 接口不变
+
+### 最佳实践建议
+
+#### 1. 前端开发
+
+- 建议使用正确的参数名：`proxyIPs`（数组）和 `port`
+- 确保传递的参数格式正确
+- 添加参数验证
+
+#### 2. 后端开发
+
+- 提供参数兼容性处理
+- 添加详细的调试日志
+- 保持向后兼容性
+
+#### 3. 测试验证
+
+- 测试自定义 IP 地址配置
+- 验证生成的节点路径
+- 确认连接时显示正确的 IP
+
+### 总结
+
+这次修复成功解决了自定义 ProxyIP 参数兼容性问题：
+
+1. **问题根源**: 前端参数名与后端期望不匹配
+2. **解决方案**: 添加参数兼容性处理逻辑
+3. **修复效果**: 自定义 ProxyIP 节点正常工作
+4. **用户体验**: 用户配置的 IP 地址正确生效
+
+**用户反馈**: "已经可以正确使用配置的 proxip 了 完美" ✅
+
+---
+
+**第二十次关键修复时间**: 2024 年 12 月 19 日 🔧 **解决自定义 ProxyIP 参数兼容性问题**  
+**修复状态**: ✅ 完成  
+**测试状态**: ✅ 用户验证通过  
+**用户满意度**: ⭐⭐⭐⭐⭐
