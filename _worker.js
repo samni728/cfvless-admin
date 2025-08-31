@@ -2772,9 +2772,11 @@ export default {
           config_data.domain =
             request.headers.get("Host") || "your-domain.pages.dev";
           console.log(`强制设置域名为当前域名: ${config_data.domain}`);
-          
+
           // 调试：检查用户自定义的 ProxyIP 配置
-          console.log(`用户配置的 ProxyIP: ${JSON.stringify(config_data.proxyIPs)}`);
+          console.log(
+            `用户配置的 ProxyIP: ${JSON.stringify(config_data.proxyIPs)}`
+          );
           console.log(`用户配置的完整数据: ${JSON.stringify(config_data)}`);
         }
 
@@ -2953,6 +2955,12 @@ export default {
             message: "源节点配置创建成功",
             generated_node: generatedNode,
             config_data: config_data,
+            debug_info: {
+              proxyIPs: config_data.proxyIPs,
+              domain: config_data.domain,
+              node_type: node_type,
+              generated_path: generatedNode.includes('path=') ? generatedNode.split('path=')[1].split('&')[0] : 'N/A'
+            }
           }),
           {
             status: 201,
@@ -3105,9 +3113,11 @@ export default {
           config_data.domain =
             request.headers.get("Host") || "your-domain.pages.dev";
           console.log(`强制设置域名为当前域名: ${config_data.domain}`);
-          
+
           // 调试：检查用户自定义的 ProxyIP 配置
-          console.log(`用户配置的 ProxyIP: ${JSON.stringify(config_data.proxyIPs)}`);
+          console.log(
+            `用户配置的 ProxyIP: ${JSON.stringify(config_data.proxyIPs)}`
+          );
           console.log(`用户配置的完整数据: ${JSON.stringify(config_data)}`);
         }
 
@@ -3258,6 +3268,12 @@ export default {
               fingerprint: config_data.fingerprint || "randomized",
               alpn: config_data.alpn || "http/1.1",
             },
+            debug_info: {
+              proxyIPs: config_data.proxyIPs,
+              domain: config_data.domain,
+              node_type: node_type,
+              generated_path: generatedNode.includes('path=') ? generatedNode.split('path=')[1].split('&')[0] : 'N/A'
+            }
           }),
           {
             headers: { "Content-Type": "application/json" },
