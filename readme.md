@@ -49,6 +49,7 @@
 3. **上传文件**：
 
    - 将以下 2 个文件拖打包压缩成一个文件，或者放到一个目录里，把目录拽到上传区域：
+
      - `index.html`（主页面）
      - `_worker.js`（后端逻辑）
 
@@ -84,7 +85,9 @@
    **注意**：Cloudflare D1 控制台无法一次性执行长脚本，需要分段执行。请按以下步骤操作：
 
    **第一步：创建表结构**
+
    - 复制以下代码到 SQL 输入框：
+
    ```sql
    CREATE TABLE IF NOT EXISTS users (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -94,10 +97,12 @@
        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
    );
    ```
+
    - 点击 **执行** 按钮
    - 重复执行以下每个表的创建语句：
 
    **第二步：创建订阅源表**
+
    ```sql
    CREATE TABLE IF NOT EXISTS subscription_sources (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -114,6 +119,7 @@
    ```
 
    **第三步：创建节点池表**
+
    ```sql
    CREATE TABLE IF NOT EXISTS node_pool (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -131,6 +137,7 @@
    ```
 
    **第四步：创建订阅表**
+
    ```sql
    CREATE TABLE IF NOT EXISTS subscriptions (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -144,6 +151,7 @@
    ```
 
    **第五步：创建标签表**
+
    ```sql
    CREATE TABLE IF NOT EXISTS tags (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -158,6 +166,7 @@
    ```
 
    **第六步：创建节点标签映射表**
+
    ```sql
    CREATE TABLE IF NOT EXISTS node_tag_map (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -171,6 +180,7 @@
    ```
 
    **第七步：创建源节点配置表**
+
    ```sql
    CREATE TABLE IF NOT EXISTS source_node_configs (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -188,7 +198,9 @@
    ```
 
    **第八步：创建索引**
+
    - 执行以下索引创建语句（可以一次性执行多个索引）：
+
    ```sql
    CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
    CREATE INDEX IF NOT EXISTS idx_users_uuid ON users(user_uuid);
