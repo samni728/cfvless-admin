@@ -1,22 +1,23 @@
 # 🌐 订阅聚合管理平台 - 小白部署指南
 
-这是一个基于 **Cloudflare Workers + D1数据库 + KV存储** 的订阅聚合管理平台，提供用户注册/登录、订阅源管理、Tag-based节点管理、节点池管理和订阅输出功能。
+这是一个基于 **Cloudflare Workers + D1 数据库 + KV 存储** 的订阅聚合管理平台，提供用户注册/登录、订阅源管理、Tag-based 节点管理、节点池管理和订阅输出功能。
 
 ## ✨ 核心特性
 
 - 🔐 **用户系统**：完整的注册/登录/会话管理
 - 📡 **订阅管理**：支持多种订阅源的导入和刷新
-- 🏷️ **Tag系统**：灵活的节点分类和管理
+- 🏷️ **Tag 系统**：灵活的节点分类和管理
 - 🎯 **节点生成器**：智能节点生成和扩展
 - 📊 **数据统计**：实时的使用情况分析
-- 🌐 **多格式支持**：Base64、Clash、Sing-box等格式
+- 🌐 **多格式支持**：Base64、Clash、Sing-box 等格式
 - 📱 **响应式设计**：完美适配桌面和移动设备
 
-## 🚀 小白部署指南（推荐）
+## 🚀 部署指南（推荐）
 
 ### 📋 准备工作
 
 在开始之前，您需要：
+
 - ✅ 一个 Cloudflare 账户（免费即可）
 - ✅ 下载本项目代码到本地
 
@@ -25,6 +26,7 @@
 #### 1.1 登录 Cloudflare Dashboard
 
 1. **访问 Cloudflare**：
+
    - 打开浏览器，访问：https://dash.cloudflare.com
    - 使用您的账户登录
 
@@ -35,18 +37,21 @@
 #### 1.2 创建新项目
 
 1. **开始创建**：
+
    - 点击 **创建应用程序** 按钮
    - 选择 **上传资产** 选项
 
 2. **项目配置**：
+
    - **项目名称**：输入 `cfvless-admin`（或您喜欢的名称）
    - 点击 **创建项目**
 
 3. **上传文件**：
-   - 将以下 3 个文件拖拽到上传区域：
+
+   - 将以下 2 个文件拖打包压缩成一个文件，或者放到一个目录里，把目录拽到上传区域：
      - `index.html`（主页面）
      - `_worker.js`（后端逻辑）
-     - `data.js`（数据文件）
+
    - 点击 **部署站点**
 
 4. **等待部署**：
@@ -58,6 +63,7 @@
 #### 2.1 进入 D1 服务
 
 1. **返回主菜单**：
+
    - 在 Cloudflare Dashboard 左侧菜单
    - 点击 **Workers 和 Pages** → **D1**
 
@@ -69,14 +75,139 @@
 #### 2.2 初始化数据库表
 
 1. **进入数据库控制台**：
+
    - 点击刚创建的 `subscription-db` 数据库
    - 选择 **控制台** 标签
 
 2. **执行初始化 SQL**：
-   - 打开项目文件夹中的 `d1_init_single.sql` 文件
-   - 复制全部内容
-   - 粘贴到控制台的 SQL 输入框中
+
+   **注意**：Cloudflare D1 控制台无法一次性执行长脚本，需要分段执行。请按以下步骤操作：
+
+   **第一步：创建表结构**
+   - 复制以下代码到 SQL 输入框：
+   ```sql
+   CREATE TABLE IF NOT EXISTS users (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       username TEXT UNIQUE NOT NULL,
+       hashed_password TEXT NOT NULL,
+       user_uuid TEXT UNIQUE,
+       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+   );
+   ```
    - 点击 **执行** 按钮
+   - 重复执行以下每个表的创建语句：
+
+   **第二步：创建订阅源表**
+   ```sql
+   CREATE TABLE IF NOT EXISTS subscription_sources (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       user_id INTEGER NOT NULL,
+       source_name TEXT NOT NULL,
+       source_url TEXT NOT NULL,
+       fetch_status TEXT DEFAULT 'pending',
+       node_count INTEGER DEFAULT 0,
+       last_fetch_at DATETIME,
+       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+       FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+   );
+   ```
+
+   **第三步：创建节点池表**
+   ```sql
+   CREATE TABLE IF NOT EXISTS node_pool (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       user_id INTEGER NOT NULL,
+       source_id INTEGER,
+       node_url TEXT NOT NULL,
+       node_hash TEXT,
+       status TEXT DEFAULT 'untested',
+       last_test_at DATETIME,
+       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+       FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+       FOREIGN KEY (source_id) REFERENCES subscription_sources (id) ON DELETE CASCADE,
+       UNIQUE(user_id, node_hash)
+   );
+   ```
+
+   **第四步：创建订阅表**
+   ```sql
+   CREATE TABLE IF NOT EXISTS subscriptions (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       user_id INTEGER NOT NULL,
+       uuid TEXT UNIQUE NOT NULL,
+       node_data_base64 TEXT,
+       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+       FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+   );
+   ```
+
+   **第五步：创建标签表**
+   ```sql
+   CREATE TABLE IF NOT EXISTS tags (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       user_id INTEGER NOT NULL,
+       tag_name TEXT NOT NULL,
+       description TEXT DEFAULT '',
+       tag_uuid TEXT UNIQUE NOT NULL,
+       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+       FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+       UNIQUE(user_id, tag_name)
+   );
+   ```
+
+   **第六步：创建节点标签映射表**
+   ```sql
+   CREATE TABLE IF NOT EXISTS node_tag_map (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       node_id INTEGER NOT NULL,
+       tag_id INTEGER NOT NULL,
+       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+       FOREIGN KEY (node_id) REFERENCES node_pool (id) ON DELETE CASCADE,
+       FOREIGN KEY (tag_id) REFERENCES tags (id) ON DELETE CASCADE,
+       UNIQUE(node_id, tag_id)
+   );
+   ```
+
+   **第七步：创建源节点配置表**
+   ```sql
+   CREATE TABLE IF NOT EXISTS source_node_configs (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       user_id INTEGER NOT NULL,
+       config_name TEXT NOT NULL,
+       node_type TEXT NOT NULL CHECK (node_type IN ('nat64', 'proxyip')),
+       config_data TEXT NOT NULL,
+       generated_node TEXT NOT NULL,
+       is_default BOOLEAN DEFAULT FALSE,
+       enabled BOOLEAN DEFAULT TRUE,
+       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+       FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+   );
+   ```
+
+   **第八步：创建索引**
+   - 执行以下索引创建语句（可以一次性执行多个索引）：
+   ```sql
+   CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+   CREATE INDEX IF NOT EXISTS idx_users_uuid ON users(user_uuid);
+   CREATE INDEX IF NOT EXISTS idx_subscription_sources_user_id ON subscription_sources(user_id);
+   CREATE INDEX IF NOT EXISTS idx_subscription_sources_status ON subscription_sources(fetch_status);
+   CREATE INDEX IF NOT EXISTS idx_node_pool_user_id ON node_pool(user_id);
+   CREATE INDEX IF NOT EXISTS idx_node_pool_source_id ON node_pool(source_id);
+   CREATE INDEX IF NOT EXISTS idx_node_pool_status ON node_pool(status);
+   CREATE INDEX IF NOT EXISTS idx_node_pool_hash ON node_pool(node_hash);
+   CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON subscriptions(user_id);
+   CREATE INDEX IF NOT EXISTS idx_subscriptions_uuid ON subscriptions(uuid);
+   CREATE INDEX IF NOT EXISTS idx_tags_user_id ON tags(user_id);
+   CREATE INDEX IF NOT EXISTS idx_tags_uuid ON tags(tag_uuid);
+   CREATE INDEX IF NOT EXISTS idx_node_tag_map_node_id ON node_tag_map(node_id);
+   CREATE INDEX IF NOT EXISTS idx_node_tag_map_tag_id ON node_tag_map(tag_id);
+   CREATE INDEX IF NOT EXISTS idx_source_node_configs_user_id ON source_node_configs(user_id);
+   CREATE INDEX IF NOT EXISTS idx_source_node_configs_type ON source_node_configs(node_type);
+   CREATE INDEX IF NOT EXISTS idx_source_node_configs_default ON source_node_configs(is_default);
+   ```
 
 3. **验证创建结果**：
    - 执行成功后，可以运行以下命令查看表：
@@ -97,6 +228,7 @@
 #### 3.1 进入 KV 服务
 
 1. **访问 KV 页面**：
+
    - 在 Cloudflare Dashboard 左侧菜单
    - 点击 **Workers 和 Pages** → **KV**
 
@@ -110,6 +242,7 @@
 #### 4.1 进入 Pages 项目设置
 
 1. **返回 Pages**：
+
    - 在 Cloudflare Dashboard 中
    - 进入 **Workers 和 Pages** → **Pages**
    - 点击您的 `cfvless-admin` 项目
@@ -121,6 +254,7 @@
 #### 4.2 绑定 D1 数据库
 
 1. **添加 D1 绑定**：
+
    - 在 **D1 数据库绑定** 部分
    - 点击 **添加绑定** 按钮
 
@@ -132,6 +266,7 @@
 #### 4.3 绑定 KV 命名空间
 
 1. **添加 KV 绑定**：
+
    - 在 **KV 命名空间绑定** 部分
    - 点击 **添加绑定** 按钮
 
@@ -143,6 +278,7 @@
 #### 4.4 完成绑定
 
 1. **保存所有设置**：
+
    - 确认两个绑定都已添加
    - 点击页面底部的 **保存** 按钮
 
@@ -155,6 +291,7 @@
 #### 5.1 访问网站
 
 1. **打开网站**：
+
    - 访问您的 Pages 地址：`https://cfvless-admin.pages.dev`
    - 应该能看到登录页面
 
@@ -167,10 +304,12 @@
 如果网站无法正常工作：
 
 1. **检查绑定**：
+
    - 确认 D1 和 KV 绑定的变量名正确
    - `DB`（D1 数据库）和 `subscription`（KV 命名空间）
 
 2. **查看日志**：
+
    - 在 Pages 项目中点击 **函数** 标签
    - 查看实时日志了解错误信息
 
@@ -183,6 +322,7 @@
 ### 数据库表结构说明
 
 #### 1. **users 表** - 用户管理
+
 ```sql
 CREATE TABLE users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -192,13 +332,15 @@ CREATE TABLE users (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 ```
-- `id`: 用户唯一ID
+
+- `id`: 用户唯一 ID
 - `username`: 用户名（唯一）
 - `hashed_password`: 加密后的密码
-- `user_uuid`: 用户UUID
+- `user_uuid`: 用户 UUID
 - `created_at`: 创建时间
 
 #### 2. **subscription_sources 表** - 订阅源管理
+
 ```sql
 CREATE TABLE subscription_sources (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -213,15 +355,17 @@ CREATE TABLE subscription_sources (
     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
 ```
-- `id`: 订阅源唯一ID
-- `user_id`: 所属用户ID
+
+- `id`: 订阅源唯一 ID
+- `user_id`: 所属用户 ID
 - `source_name`: 订阅源名称
-- `source_url`: 订阅源URL
+- `source_url`: 订阅源 URL
 - `fetch_status`: 获取状态
 - `node_count`: 节点数量
 - `last_fetch_at`: 最后获取时间
 
 #### 3. **node_pool 表** - 节点池管理
+
 ```sql
 CREATE TABLE node_pool (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -237,14 +381,16 @@ CREATE TABLE node_pool (
     UNIQUE(user_id, node_hash)
 );
 ```
-- `id`: 节点唯一ID
-- `user_id`: 所属用户ID
-- `source_id`: 来源订阅源ID
-- `node_url`: 节点URL
+
+- `id`: 节点唯一 ID
+- `user_id`: 所属用户 ID
+- `source_id`: 来源订阅源 ID
+- `node_url`: 节点 URL
 - `node_hash`: 节点哈希值
 - `status`: 节点状态
 
 #### 4. **tags 表** - 标签管理
+
 ```sql
 CREATE TABLE tags (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -257,13 +403,15 @@ CREATE TABLE tags (
     UNIQUE(user_id, tag_name)
 );
 ```
-- `id`: 标签唯一ID
-- `user_id`: 所属用户ID
+
+- `id`: 标签唯一 ID
+- `user_id`: 所属用户 ID
 - `tag_name`: 标签名称
 - `description`: 标签描述
-- `tag_uuid`: 标签UUID
+- `tag_uuid`: 标签 UUID
 
 #### 5. **node_tag_map 表** - 节点标签映射
+
 ```sql
 CREATE TABLE node_tag_map (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -275,11 +423,13 @@ CREATE TABLE node_tag_map (
     UNIQUE(node_id, tag_id)
 );
 ```
-- `id`: 映射唯一ID
-- `node_id`: 节点ID
-- `tag_id`: 标签ID
+
+- `id`: 映射唯一 ID
+- `node_id`: 节点 ID
+- `tag_id`: 标签 ID
 
 #### 6. **subscriptions 表** - 订阅管理
+
 ```sql
 CREATE TABLE subscriptions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -291,12 +441,14 @@ CREATE TABLE subscriptions (
     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
 ```
-- `id`: 订阅唯一ID
-- `user_id`: 所属用户ID
-- `uuid`: 订阅UUID
-- `node_data_base64`: Base64编码的节点数据
+
+- `id`: 订阅唯一 ID
+- `user_id`: 所属用户 ID
+- `uuid`: 订阅 UUID
+- `node_data_base64`: Base64 编码的节点数据
 
 #### 7. **source_node_configs 表** - 源节点配置
+
 ```sql
 CREATE TABLE source_node_configs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -312,11 +464,12 @@ CREATE TABLE source_node_configs (
     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
 ```
-- `id`: 配置唯一ID
-- `user_id`: 所属用户ID
+
+- `id`: 配置唯一 ID
+- `user_id`: 所属用户 ID
 - `config_name`: 配置名称
-- `node_type`: 节点类型（nat64或proxyip）
-- `config_data`: 配置数据（JSON格式）
+- `node_type`: 节点类型（nat64 或 proxyip）
+- `config_data`: 配置数据（JSON 格式）
 - `generated_node`: 生成的节点链接
 
 ### 重要索引说明
@@ -355,88 +508,105 @@ CREATE INDEX idx_source_node_configs_default ON source_node_configs(is_default);
 ### 常见问题及解决方案
 
 #### 1. **网站无法访问**
-**症状**：访问Pages地址显示错误页面
+
+**症状**：访问 Pages 地址显示错误页面
 **解决方案**：
-- 检查Pages项目是否部署成功
+
+- 检查 Pages 项目是否部署成功
 - 确认域名配置正确
 - 查看部署日志是否有错误
 
 #### 2. **无法注册/登录**
+
 **症状**：注册或登录按钮无响应
 **解决方案**：
-- 确认D1数据库已创建并初始化
+
+- 确认 D1 数据库已创建并初始化
 - 检查数据库绑定变量名是否为`DB`
 - 验证数据库表结构是否正确
 
 #### 3. **功能异常**
+
 **症状**：某些功能无法使用
 **解决方案**：
-- 确认KV命名空间已创建
-- 检查KV绑定变量名是否为`subscription`
+
+- 确认 KV 命名空间已创建
+- 检查 KV 绑定变量名是否为`subscription`
 - 重新部署项目
 
 #### 4. **数据库连接失败**
+
 **症状**：控制台显示数据库错误
 **解决方案**：
-- 检查D1数据库状态
+
+- 检查 D1 数据库状态
 - 确认绑定配置正确
 - 验证数据库权限设置
 
 ### 调试方法
 
-#### 1. **查看Pages日志**
-1. 进入Pages项目
+#### 1. **查看 Pages 日志**
+
+1. 进入 Pages 项目
 2. 点击**函数**标签
 3. 查看实时日志输出
 
 #### 2. **检查数据库状态**
-1. 进入D1服务
+
+1. 进入 D1 服务
 2. 选择数据库
 3. 查看表结构和数据
 
 #### 3. **验证绑定配置**
-1. 进入Pages项目设置
+
+1. 进入 Pages 项目设置
 2. 检查函数绑定
 3. 确认变量名和资源匹配
 
 ## 📱 使用说明
 
 ### 1. **用户注册**
+
 - 访问网站首页
 - 点击"注册"按钮
 - 输入用户名和密码
 - 系统自动创建用户账户
 
 ### 2. **用户登录**
+
 - 输入用户名和密码
 - 点击"登录"按钮
 - 系统创建会话并跳转到管理界面
 
 ### 3. **订阅源管理**
-- 添加订阅源URL
+
+- 添加订阅源 URL
 - 系统自动解析节点
 - 支持手动刷新和更新
 
-### 4. **Tag管理**
+### 4. **Tag 管理**
+
 - 创建自定义标签
 - 将节点分配到不同标签
 - 支持批量操作
 
 ### 5. **节点生成器**
+
 - 选择模板节点
 - 配置生成参数
 - 生成扩展节点
 
 ### 6. **订阅输出**
+
 - 支持多种格式
 - 实时更新节点列表
 - 个性化订阅链接
 
 ## 🌟 项目特色
 
-- **简单部署**：只需3个文件，拖拽上传即可
+- **简单部署**：只需 3 个文件，拖拽上传即可
 - **自动配置**：用户注册时自动创建默认配置
-- **智能管理**：Tag-based节点分类管理
+- **智能管理**：Tag-based 节点分类管理
 - **多格式支持**：兼容主流客户端
 - **响应式设计**：完美适配各种设备
 
@@ -445,13 +615,13 @@ CREATE INDEX idx_source_node_configs_default ON source_node_configs(is_default);
 如果您在使用过程中遇到问题：
 
 1. **检查部署步骤**：确保按照指南逐步操作
-2. **查看错误日志**：在Pages函数标签中查看详细错误信息
-3. **验证配置**：确认数据库和KV绑定正确
+2. **查看错误日志**：在 Pages 函数标签中查看详细错误信息
+3. **验证配置**：确认数据库和 KV 绑定正确
 4. **重新部署**：绑定资源后需要重新部署
 
 ## ⚠️ 重要提醒
 
-- **免费版限制**：Cloudflare免费版有使用量限制
+- **免费版限制**：Cloudflare 免费版有使用量限制
 - **数据备份**：定期备份重要数据
 - **安全设置**：使用强密码保护账户
 - **合规使用**：遵守当地法律法规
@@ -460,6 +630,6 @@ CREATE INDEX idx_source_node_configs_default ON source_node_configs(is_default);
 
 **项目地址**: [CFvless-ADMIN](https://github.com/samni728/cfvless-admin)
 
-**最后更新**: 2025年1月
+**最后更新**: 2025 年 1 月
 
 **部署难度**: ⭐⭐ (适合小白用户)
