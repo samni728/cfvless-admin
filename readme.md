@@ -1,6 +1,6 @@
-# 🌐 订阅聚合管理平台 - 小白部署指南
+# 🌐 订阅聚合管理平台 - 部署指南
 
-这是一个基于 **Cloudflare Workers + D1 数据库 + KV 存储** 的订阅聚合管理平台，提供用户注册/登录、订阅源管理、Tag-based 节点管理、节点池管理和订阅输出功能。
+这是一个基于 **Cloudflare Workers + D1 数据库 + KV 存储** 的订阅聚合管理平台，提供自带 vless proxyip 节点 用户注册/登录、订阅管理、Tag-based 节点管理、节点池管理和订阅输出功能。
 
 ## ✨ 核心特性
 
@@ -336,105 +336,6 @@
    - 在 Pages 项目中点击 **部署** 标签
    - 点击最新部署右侧的 **重试** 按钮
 
-## 🎯 数据库配置说明
-
-**注意**：数据库表结构已在上述 SQL 执行步骤中详细说明，无需重复配置。
-
-- `tag_uuid`: 标签 UUID
-
-#### 5. **node_tag_map 表** - 节点标签映射
-
-```sql
-CREATE TABLE node_tag_map (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    node_id INTEGER NOT NULL,
-    tag_id INTEGER NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (node_id) REFERENCES node_pool (id) ON DELETE CASCADE,
-    FOREIGN KEY (tag_id) REFERENCES tags (id) ON DELETE CASCADE,
-    UNIQUE(node_id, tag_id)
-);
-```
-
-- `id`: 映射唯一 ID
-- `node_id`: 节点 ID
-- `tag_id`: 标签 ID
-
-#### 6. **subscriptions 表** - 订阅管理
-
-```sql
-CREATE TABLE subscriptions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    uuid TEXT UNIQUE NOT NULL,
-    node_data_base64 TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-);
-```
-
-- `id`: 订阅唯一 ID
-- `user_id`: 所属用户 ID
-- `uuid`: 订阅 UUID
-- `node_data_base64`: Base64 编码的节点数据
-
-#### 7. **source_node_configs 表** - 源节点配置
-
-```sql
-CREATE TABLE source_node_configs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    config_name TEXT NOT NULL,
-    node_type TEXT NOT NULL CHECK (node_type IN ('nat64', 'proxyip')),
-    config_data TEXT NOT NULL,
-    generated_node TEXT NOT NULL,
-    is_default BOOLEAN DEFAULT FALSE,
-    enabled BOOLEAN DEFAULT TRUE,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-);
-```
-
-- `id`: 配置唯一 ID
-- `user_id`: 所属用户 ID
-- `config_name`: 配置名称
-- `node_type`: 节点类型（nat64 或 proxyip）
-- `config_data`: 配置数据（JSON 格式）
-- `generated_node`: 生成的节点链接
-
-### 重要索引说明
-
-```sql
--- 用户相关索引
-CREATE INDEX idx_users_username ON users(username);
-CREATE INDEX idx_users_uuid ON users(user_uuid);
-
--- 订阅源相关索引
-CREATE INDEX idx_subscription_sources_user_id ON subscription_sources(user_id);
-CREATE INDEX idx_subscription_sources_status ON subscription_sources(fetch_status);
-
--- 节点池相关索引
-CREATE INDEX idx_node_pool_user_id ON node_pool(user_id);
-CREATE INDEX idx_node_pool_source_id ON node_pool(source_id);
-CREATE INDEX idx_node_pool_status ON node_pool(status);
-CREATE INDEX idx_node_pool_hash ON node_pool(node_hash);
-
--- 标签相关索引
-CREATE INDEX idx_tags_user_id ON tags(user_id);
-CREATE INDEX idx_tags_uuid ON tags(tag_uuid);
-
--- 映射相关索引
-CREATE INDEX idx_node_tag_map_node_id ON node_tag_map(node_id);
-CREATE INDEX idx_node_tag_map_tag_id ON node_tag_map(tag_id);
-
--- 源节点配置相关索引
-CREATE INDEX idx_source_node_configs_user_id ON source_node_configs(user_id);
-CREATE INDEX idx_source_node_configs_type ON source_node_configs(node_type);
-CREATE INDEX idx_source_node_configs_default ON source_node_configs(is_default);
-```
-
 ## 🔧 故障排除
 
 ### 常见问题及解决方案
@@ -578,6 +479,31 @@ CREATE INDEX idx_source_node_configs_default ON source_node_configs(is_default);
     "8.6.146.0/24"     // 可修改
   ]
 }
+```
+
+### 🌐 ProxyIP 自定义配置
+
+项目支持自定义 ProxyIP 地址，用于节点代理：
+
+- **位置**：在 `_worker.js` 文件的第 13 行附近
+- **配置说明**：`// ProxyIP 配置 - 用户可以修改为自己的 ProxyIP 地址`
+- **修改方法**：
+  - 编辑 `_worker.js` 文件
+  - 找到 `const DEFAULT_PROXY_IP = "129.159.84.71";`
+  - 修改为你的 ProxyIP 地址
+- **支持格式**：
+  - 单个 IP：`"your.proxy.ip"`
+  - 多个 IP：`"ip1,ip2,ip3"`（用逗号分隔）
+- **应用场景**：根据你的实际代理服务器配置调整
+
+### 🔧 ProxyIP 配置示例
+
+```javascript
+// 单个 ProxyIP
+const DEFAULT_PROXY_IP = "your.proxy.server.com";
+
+// 多个 ProxyIP（用逗号分隔）
+const DEFAULT_PROXY_IP = "proxy1.example.com,proxy2.example.com,proxy3.example.com";
 ```
 
 ## 🌟 项目特色
