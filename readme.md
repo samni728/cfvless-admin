@@ -48,11 +48,16 @@
 
 3. **上传文件**：
 
-   - 将以下 2 个文件拖打包压缩成一个文件，或者放到一个目录里，把目录拽到上传区域：
-
+   **方法一：直接拖拽文件（推荐）**
+   - 将以下 2 个文件直接拖拽到上传区域：
      - `index.html`（主页面）
      - `_worker.js`（后端逻辑）
-
+   
+   **方法二：使用打包文件**
+   - 下载 [v2.0 Release包](https://github.com/samni728/cfvless-admin/releases/tag/v2.0)
+   - 解压后得到 `index.html` 和 `_worker.js`
+   - 将这两个文件拖拽到上传区域
+   
    - 点击 **部署站点**
 
 4. **等待部署**：
@@ -295,7 +300,7 @@
    - 点击页面底部的 **保存** 按钮
 
 2. **等待重新部署**：
-   - 保存后，Pages 会自动重新部署
+   - 保存后，必须重新上传一次上面的pages 的文件，必须重新部署一次，Pages 的刚才的设置才会生效！
    - 等待部署完成（通常 1-2 分钟）
 
 ### 步骤 5：验证部署
@@ -304,7 +309,7 @@
 
 1. **打开网站**：
 
-   - 访问您的 Pages 地址：`https://cfvless-admin.pages.dev`
+   - 访问您的 Pages 地址：`https://你的 pages 域名.pages.dev`
    - 应该能看到登录页面
 
 2. **测试功能**：
@@ -614,9 +619,25 @@ CREATE INDEX idx_source_node_configs_default ON source_node_configs(is_default);
 - 实时更新节点列表
 - 个性化订阅链接
 
+## 📦 快速下载
+
+### 🚀 最新版本下载
+
+**v2.0 稳定版**：[下载 Release 包](https://github.com/samni728/cfvless-admin/releases/tag/v2.0)
+
+- 📁 包含文件：`index.html` + `_worker.js`
+- 🎯 开箱即用，无需额外配置
+- 📱 支持拖拽部署到 Cloudflare Pages
+
+### 🔧 手动下载
+
+如果您想手动下载单个文件：
+- [index.html](https://github.com/samni728/cfvless-admin/blob/main/index.html) - 主页面文件
+- [_worker.js](https://github.com/samni728/cfvless-admin/blob/main/_worker.js) - 后端逻辑文件
+
 ## 🌟 项目特色
 
-- **简单部署**：只需 3 个文件，拖拽上传即可
+- **简单部署**：只需 2 个文件，拖拽上传即可
 - **自动配置**：用户注册时自动创建默认配置
 - **智能管理**：Tag-based 节点分类管理
 - **多格式支持**：兼容主流客户端
