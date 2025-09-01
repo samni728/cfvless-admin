@@ -2093,6 +2093,88 @@ export default {
       }
     }
 
+    // 路由: 获取指定Tag的节点列表 (GET /api/tags/{id}/nodes) - 受保护
+    if (
+      url.pathname.match(/^\/api\/tags\/\d+\/nodes$/) &&
+      request.method === "GET"
+    ) {
+      try {
+        const user = await getUserBySession(request, env);
+        if (!user)
+          return new Response(JSON.stringify({ error: "未授权" }), {
+            status: 401,
+          });
+
+        // 从URL中提取tag ID
+        const tagIdMatch = url.pathname.match(/^\/api\/tags\/(\d+)\/nodes$/);
+        if (!tagIdMatch) {
+          return new Response(JSON.stringify({ error: "无效的Tag ID" }), {
+            status: 400,
+          });
+        }
+
+        const tagId = parseInt(tagIdMatch[1]);
+
+        // 验证Tag是否属于当前用户
+        const tag = await env.DB.prepare(
+          "SELECT id, tag_name FROM tags WHERE id = ? AND user_id = ?"
+        )
+          .bind(tagId, user.id)
+          .first();
+
+        if (!tag) {
+          return new Response(
+            JSON.stringify({ error: "Tag不存在或无权限访问" }),
+            {
+              status: 404,
+            }
+          );
+        }
+
+        // 获取该Tag下的所有节点
+        const { results: nodes } = await env.DB.prepare(
+          `
+          SELECT 
+            np.id,
+            np.node_url,
+            np.status,
+            np.created_at,
+            np.node_hash
+          FROM node_pool np
+          INNER JOIN node_tag_map ntm ON np.id = ntm.node_id
+          WHERE ntm.tag_id = ? AND np.user_id = ?
+          ORDER BY np.created_at DESC
+        `
+        )
+          .bind(tagId, user.id)
+          .all();
+
+        return new Response(
+          JSON.stringify({
+            tag_id: tagId,
+            tag_name: tag.tag_name,
+            nodes: nodes || [],
+            count: nodes ? nodes.length : 0,
+          }),
+          {
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      } catch (e) {
+        console.error("获取Tag节点失败:", e);
+        return new Response(
+          JSON.stringify({
+            error: `获取Tag节点失败: ${e.message}`,
+            stack: e.stack,
+          }),
+          {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      }
+    }
+
     // 路由: 更新节点状态 (POST /api/nodes/update-status) - 受保护
     if (
       url.pathname === "/api/nodes/update-status" &&

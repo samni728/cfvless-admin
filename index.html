@@ -594,11 +594,16 @@
                   <label for="templateNodeSelect" class="form-label">
                     <strong>🌐 选择模板节点:</strong>
                   </label>
-                  <select class="form-select" id="templateNodeSelect" onchange="onTemplateNodeSelect()">
+                  <select
+                    class="form-select"
+                    id="templateNodeSelect"
+                    onchange="onTemplateNodeSelect()"
+                  >
                     <option value="">请选择模板节点...</option>
                   </select>
                   <div class="form-text">
-                    💡 从您的Tag节点中选择一个作为生成模板，如果没有可用节点请先添加节点到Tag
+                    💡
+                    从您的Tag节点中选择一个作为生成模板，如果没有可用节点请先添加节点到Tag
                   </div>
                 </div>
 
@@ -630,7 +635,9 @@
                         id="formatVless"
                         value="vless"
                       />
-                      <label class="form-check-label" for="formatVless">VLESS</label>
+                      <label class="form-check-label" for="formatVless"
+                        >VLESS</label
+                      >
                     </div>
                     <div class="form-check form-check-inline">
                       <input
@@ -641,7 +648,9 @@
                         value="vmess_json"
                         checked
                       />
-                      <label class="form-check-label" for="formatVmessJson">VMess (for v2rayN/U)</label>
+                      <label class="form-check-label" for="formatVmessJson"
+                        >VMess (for v2rayN/U)</label
+                      >
                     </div>
                     <div class="form-check form-check-inline">
                       <input
@@ -651,7 +660,9 @@
                         id="formatVmessQuery"
                         value="vmess_query"
                       />
-                      <label class="form-check-label" for="formatVmessQuery">VMess (for Shadowrocket)</label>
+                      <label class="form-check-label" for="formatVmessQuery"
+                        >VMess (for Shadowrocket)</label
+                      >
                     </div>
                   </div>
                 </div>
@@ -2154,18 +2165,25 @@
         try {
           // 获取所有Tag的节点数据
           const tagNodes = [];
-          
+
           // 遍历所有Tag，获取每个Tag的节点
           for (const tag of allTags) {
             try {
-              const result = await apiRequest(`/api/tags/${tag.id}/nodes`, "GET");
-              if (result.ok && result.data.length > 0) {
-                result.data.forEach(node => {
+              const result = await apiRequest(
+                `/api/tags/${tag.id}/nodes`,
+                "GET"
+              );
+              if (
+                result.ok &&
+                result.data.nodes &&
+                result.data.nodes.length > 0
+              ) {
+                result.data.nodes.forEach((node) => {
                   tagNodes.push({
                     tagName: tag.tag_name,
                     nodeUrl: node.node_url,
                     nodeName: extractNodeName(node.node_url),
-                    nodeId: node.id
+                    nodeId: node.id,
                   });
                 });
               }
@@ -2173,7 +2191,7 @@
               console.error(`获取Tag ${tag.tag_name} 的节点失败:`, error);
             }
           }
-          
+
           allTagNodes = tagNodes;
           populateTemplateNodeDropdown();
         } catch (error) {
@@ -2188,13 +2206,14 @@
         select.innerHTML = '<option value="">请选择模板节点...</option>';
 
         if (allTagNodes.length === 0) {
-          select.innerHTML = '<option value="">暂无可用节点，请先在Tag管理中添加节点</option>';
+          select.innerHTML =
+            '<option value="">暂无可用节点，请先在Tag管理中添加节点</option>';
           return;
         }
 
         // 按Tag分组显示节点
         const nodesByTag = {};
-        allTagNodes.forEach(node => {
+        allTagNodes.forEach((node) => {
           if (!nodesByTag[node.tagName]) {
             nodesByTag[node.tagName] = [];
           }
@@ -2202,18 +2221,18 @@
         });
 
         // 为每个Tag创建optgroup
-        Object.keys(nodesByTag).forEach(tagName => {
+        Object.keys(nodesByTag).forEach((tagName) => {
           const optgroup = document.createElement("optgroup");
           optgroup.label = `🏷️ ${tagName}`;
-          
-          nodesByTag[tagName].forEach(node => {
+
+          nodesByTag[tagName].forEach((node) => {
             const option = document.createElement("option");
             option.value = node.nodeUrl;
-            option.textContent = node.nodeName || '未命名节点';
+            option.textContent = node.nodeName || "未命名节点";
             option.dataset.tagName = node.tagName;
             optgroup.appendChild(option);
           });
-          
+
           select.appendChild(optgroup);
         });
       }
@@ -2222,12 +2241,14 @@
       function onTemplateNodeSelect() {
         const select = document.getElementById("templateNodeSelect");
         const selectedValue = select.value;
-        
+
         if (selectedValue) {
           // 清空手动粘贴框
           document.getElementById("templateUrl").value = "";
+          // 根据选择的模板节点自动选择输出格式
+          autoSelectOutputFormat(selectedValue);
         }
-        
+
         updateEstimation();
       }
 
@@ -2237,6 +2258,8 @@
         if (templateUrl) {
           // 清除下拉选择
           document.getElementById("templateNodeSelect").value = "";
+          // 根据粘贴的节点URL自动选择输出格式
+          autoSelectOutputFormat(templateUrl);
         }
         updateEstimation();
       }
@@ -2244,7 +2267,8 @@
       // 获取当前选中的模板节点URL
       function getCurrentSourceNodeUrl() {
         // 优先从下拉选择获取
-        const selectedFromDropdown = document.getElementById("templateNodeSelect").value;
+        const selectedFromDropdown =
+          document.getElementById("templateNodeSelect").value;
         if (selectedFromDropdown) {
           return selectedFromDropdown;
         }
@@ -2254,22 +2278,52 @@
         return templateUrl;
       }
 
+      // 根据节点URL自动选择输出格式
+      function autoSelectOutputFormat(nodeUrl) {
+        if (!nodeUrl) return;
+
+        const vlessRadio = document.getElementById("formatVless");
+        const vmessJsonRadio = document.getElementById("formatVmessJson");
+        const vmessQueryRadio = document.getElementById("formatVmessQuery");
+
+        if (nodeUrl.startsWith("vless://")) {
+          vlessRadio.checked = true;
+          vmessJsonRadio.disabled = true;
+          vmessQueryRadio.disabled = true;
+        } else if (nodeUrl.startsWith("vmess://")) {
+          vlessRadio.disabled = true;
+          vmessJsonRadio.disabled = false;
+          vmessQueryRadio.disabled = false;
+          // 如果当前没有选中的格式，默认选择JSON格式
+          if (!document.querySelector('input[name="outputFormat"]:checked')) {
+            vmessJsonRadio.checked = true;
+          }
+        } else {
+          // 重新启用所有选项
+          vlessRadio.disabled = false;
+          vmessJsonRadio.disabled = false;
+          vmessQueryRadio.disabled = false;
+        }
+      }
+
       // 提取节点名称
       function extractNodeName(nodeUrl) {
         try {
-          if (nodeUrl.startsWith('vless://')) {
+          if (nodeUrl.startsWith("vless://")) {
             const url = new URL(nodeUrl);
-            return url.hash ? decodeURIComponent(url.hash.substring(1)) : `${url.hostname}:${url.port}`;
-          } else if (nodeUrl.startsWith('vmess://')) {
-            const data = nodeUrl.substring('vmess://'.length);
+            return url.hash
+              ? decodeURIComponent(url.hash.substring(1))
+              : `${url.hostname}:${url.port}`;
+          } else if (nodeUrl.startsWith("vmess://")) {
+            const data = nodeUrl.substring("vmess://".length);
             const decoded = safeBase64Decode(data);
             const config = JSON.parse(decoded);
             return config.ps || `${config.add}:${config.port}`;
           }
         } catch (error) {
-          console.error('提取节点名称失败:', error);
+          console.error("提取节点名称失败:", error);
         }
-        return '未知节点';
+        return "未知节点";
       }
 
       function generateNodes() {
@@ -3893,28 +3947,7 @@
         const templateInput = document.getElementById("templateUrl");
         templateInput.addEventListener("input", (event) => {
           const url = event.target.value.trim();
-          const vlessRadio = document.getElementById("formatVless");
-          const vmessJsonRadio = document.getElementById("formatVmessJson");
-          const vmessQueryRadio = document.getElementById("formatVmessQuery");
-
-          if (url.startsWith("vless://")) {
-            vlessRadio.checked = true;
-            vmessJsonRadio.disabled = true;
-            vmessQueryRadio.disabled = true;
-          } else if (url.startsWith("vmess://")) {
-            vlessRadio.disabled = true;
-            vmessJsonRadio.disabled = false;
-            vmessQueryRadio.disabled = false;
-            // 如果当前没有选中的格式，默认选择JSON格式
-            if (!document.querySelector('input[name="outputFormat"]:checked')) {
-              vmessJsonRadio.checked = true;
-            }
-          } else {
-            // 重新启用所有选项
-            vlessRadio.disabled = false;
-            vmessJsonRadio.disabled = false;
-            vmessQueryRadio.disabled = false;
-          }
+          autoSelectOutputFormat(url);
         });
 
         // 为自定义数据输入框添加事件监听器
@@ -4205,7 +4238,8 @@
 
       // 生成节点函数
       function generateNodes() {
-        const templateUrl = document.getElementById("templateUrl").value.trim();
+        // 获取当前选择的模板节点（优先从下拉选择，其次从手动粘贴）
+        const templateUrl = getCurrentSourceNodeUrl();
         const quantity = parseInt(
           document.getElementById("quantity").value,
           10
