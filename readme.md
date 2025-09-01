@@ -57,10 +57,10 @@
    **方法二：使用打包文件（更简单）**
 
 - 下载 [v2.0 Release 包](https://github.com/samni728/cfvless-admin/releases/tag/v2.0)
-- 直接将zip包拖拽到上传区域，Cloudflare Pages会自动解压
+- 直接将 zip 包拖拽到上传区域，Cloudflare Pages 会自动解压
 - 无需手动解压文件
 
-   - 点击 **部署站点**
+  - 点击 **部署站点**
 
 4. **等待部署**：
    - 系统会自动部署您的文件
@@ -336,97 +336,9 @@
    - 在 Pages 项目中点击 **部署** 标签
    - 点击最新部署右侧的 **重试** 按钮
 
-## 🎯 手动数据库配置详解
+## 🎯 数据库配置说明
 
-### 数据库表结构说明
-
-#### 1. **users 表** - 用户管理
-
-```sql
-CREATE TABLE users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    hashed_password TEXT NOT NULL,
-    user_uuid TEXT UNIQUE,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-- `id`: 用户唯一 ID
-- `username`: 用户名（唯一）
-- `hashed_password`: 加密后的密码
-- `user_uuid`: 用户 UUID
-- `created_at`: 创建时间
-
-#### 2. **subscription_sources 表** - 订阅源管理
-
-```sql
-CREATE TABLE subscription_sources (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    source_name TEXT NOT NULL,
-    source_url TEXT NOT NULL,
-    fetch_status TEXT DEFAULT 'pending',
-    node_count INTEGER DEFAULT 0,
-    last_fetch_at DATETIME,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-);
-```
-
-- `id`: 订阅源唯一 ID
-- `user_id`: 所属用户 ID
-- `source_name`: 订阅源名称
-- `source_url`: 订阅源 URL
-- `fetch_status`: 获取状态
-- `node_count`: 节点数量
-- `last_fetch_at`: 最后获取时间
-
-#### 3. **node_pool 表** - 节点池管理
-
-```sql
-CREATE TABLE node_pool (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    source_id INTEGER,
-    node_url TEXT NOT NULL,
-    node_hash TEXT,
-    status TEXT DEFAULT 'untested',
-    last_test_at DATETIME,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-    FOREIGN KEY (source_id) REFERENCES subscription_sources (id) ON DELETE CASCADE,
-    UNIQUE(user_id, node_hash)
-);
-```
-
-- `id`: 节点唯一 ID
-- `user_id`: 所属用户 ID
-- `source_id`: 来源订阅源 ID
-- `node_url`: 节点 URL
-- `node_hash`: 节点哈希值
-- `status`: 节点状态
-
-#### 4. **tags 表** - 标签管理
-
-```sql
-CREATE TABLE tags (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    tag_name TEXT NOT NULL,
-    description TEXT DEFAULT '',
-    tag_uuid TEXT UNIQUE NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-    UNIQUE(user_id, tag_name)
-);
-```
-
-- `id`: 标签唯一 ID
-- `user_id`: 所属用户 ID
-- `tag_name`: 标签名称
-- `description`: 标签描述
+**注意**：数据库表结构已在上述SQL执行步骤中详细说明，无需重复配置。
 - `tag_uuid`: 标签 UUID
 
 #### 5. **node_tag_map 表** - 节点标签映射
@@ -629,7 +541,7 @@ CREATE INDEX idx_source_node_configs_default ON source_node_configs(is_default);
 
 - 📁 包含文件：`index.html` + `_worker.js`
 - 🎯 开箱即用，无需额外配置
-- 📱 支持直接拖拽zip包到Cloudflare Pages
+- 📱 支持直接拖拽 zip 包到 Cloudflare Pages
 - ⚡ 自动解压，部署更简单
 
 ### 🔧 手动下载
@@ -638,6 +550,34 @@ CREATE INDEX idx_source_node_configs_default ON source_node_configs(is_default);
 
 - [index.html](https://github.com/samni728/cfvless-admin/blob/main/index.html) - 主页面文件
 - [\_worker.js](https://github.com/samni728/cfvless-admin/blob/main/_worker.js) - 后端逻辑文件
+
+## 🔧 高级配置
+
+### 🌐 IP段自定义配置
+
+项目内置了完整的IP段配置，支持自定义修改：
+
+- **位置**：在 `index.html` 文件的第 1481 行附近
+- **配置说明**：`// 数据配置 - 内置IP段配置（可自定义修改）`
+- **修改方法**：
+  - 编辑 `index.html` 文件
+  - 找到 `dataByCountry` 对象
+  - 修改对应国家的IP段配置
+  - 支持添加、删除或修改IP段
+- **格式要求**：IP段格式为 `x.x.x.x/24`（CIDR格式）
+- **应用场景**：根据实际需求调整节点生成的IP范围
+
+### 📝 配置示例
+
+```javascript
+"🇺🇸 美国 (US)": {
+  ipv4: [
+    "8.6.144.0/24",    // 可修改
+    "8.6.145.0/24",    // 可修改
+    "8.6.146.0/24"     // 可修改
+  ]
+}
+```
 
 ## 🌟 项目特色
 
