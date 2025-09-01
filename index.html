@@ -589,21 +589,38 @@
             <div class="card mb-3">
               <div class="card-header">第二步：设置模板和选项</div>
               <div class="card-body">
+                <!-- 模板节点选择 -->
                 <div class="mb-3">
-                  <label for="templateUrl" class="form-label"
-                    ><strong>粘贴源节点 (VLESS 或任意格式 VMess)</strong></label
-                  >
+                  <label for="templateNodeSelect" class="form-label">
+                    <strong>🌐 选择模板节点:</strong>
+                  </label>
+                  <select class="form-select" id="templateNodeSelect" onchange="onTemplateNodeSelect()">
+                    <option value="">请选择模板节点...</option>
+                  </select>
+                  <div class="form-text">
+                    💡 从您的Tag节点中选择一个作为生成模板，如果没有可用节点请先添加节点到Tag
+                  </div>
+                </div>
+
+                <!-- 手动粘贴节点（备用方案） -->
+                <div class="mb-3">
+                  <label for="templateUrl" class="form-label">
+                    <strong>📝 或手动粘贴节点链接:</strong>
+                  </label>
                   <input
                     type="text"
                     class="form-control"
                     id="templateUrl"
-                    placeholder="vless://... 或 vmess://..."
+                    placeholder="vless://... 或 vmess://... (如果上方没有可选节点，可在此粘贴)"
+                    oninput="onTemplateUrlInput()"
                   />
                 </div>
+
+                <!-- 输出格式选择 -->
                 <div class="mt-3">
-                  <label class="form-label"
-                    ><strong>选择输出格式:</strong></label
-                  >
+                  <label class="form-label">
+                    <strong>🎯 选择输出格式:</strong>
+                  </label>
                   <div id="format-selector">
                     <div class="form-check form-check-inline">
                       <input
@@ -613,9 +630,7 @@
                         id="formatVless"
                         value="vless"
                       />
-                      <label class="form-check-label" for="formatVless"
-                        >VLESS</label
-                      >
+                      <label class="form-check-label" for="formatVless">VLESS</label>
                     </div>
                     <div class="form-check form-check-inline">
                       <input
@@ -626,9 +641,7 @@
                         value="vmess_json"
                         checked
                       />
-                      <label class="form-check-label" for="formatVmessJson"
-                        >VMess (for v2rayN/U)</label
-                      >
+                      <label class="form-check-label" for="formatVmessJson">VMess (for v2rayN/U)</label>
                     </div>
                     <div class="form-check form-check-inline">
                       <input
@@ -638,12 +651,11 @@
                         id="formatVmessQuery"
                         value="vmess_query"
                       />
-                      <label class="form-check-label" for="formatVmessQuery"
-                        >VMess (for Shadowrocket)</label
-                      >
+                      <label class="form-check-label" for="formatVmessQuery">VMess (for Shadowrocket)</label>
                     </div>
                   </div>
                 </div>
+
                 <div id="estimation" class="alert alert-info estimation">
                   <strong>准备就绪</strong><br />
                   <small class="text-muted">请先配置数据源和模板</small>
@@ -2133,50 +2145,172 @@
       // =================================================================
       // 节点生成器相关函数
       // =================================================================
-      function generateNodes() {
-        const dataSource = document.querySelector(
-          'input[name="dataSource"]:checked'
-        ).value;
-        const templateLink = document
-          .getElementById("templateLink")
-          .value.trim();
 
-        if (!templateLink) {
-          alert("请先粘贴模板链接！");
+      // 全局变量存储Tag节点数据
+      let allTagNodes = [];
+
+      // 加载Tag节点数据到生成器
+      async function loadTagNodesForGenerator() {
+        try {
+          // 获取所有Tag的节点数据
+          const tagNodes = [];
+          
+          // 遍历所有Tag，获取每个Tag的节点
+          for (const tag of allTags) {
+            try {
+              const result = await apiRequest(`/api/tags/${tag.id}/nodes`, "GET");
+              if (result.ok && result.data.length > 0) {
+                result.data.forEach(node => {
+                  tagNodes.push({
+                    tagName: tag.tag_name,
+                    nodeUrl: node.node_url,
+                    nodeName: extractNodeName(node.node_url),
+                    nodeId: node.id
+                  });
+                });
+              }
+            } catch (error) {
+              console.error(`获取Tag ${tag.tag_name} 的节点失败:`, error);
+            }
+          }
+          
+          allTagNodes = tagNodes;
+          populateTemplateNodeDropdown();
+        } catch (error) {
+          console.error("加载Tag节点失败:", error);
+          showAlert("加载Tag节点失败，请检查网络连接", "danger");
+        }
+      }
+
+      // 填充模板节点下拉选择
+      function populateTemplateNodeDropdown() {
+        const select = document.getElementById("templateNodeSelect");
+        select.innerHTML = '<option value="">请选择模板节点...</option>';
+
+        if (allTagNodes.length === 0) {
+          select.innerHTML = '<option value="">暂无可用节点，请先在Tag管理中添加节点</option>';
           return;
         }
+
+        // 按Tag分组显示节点
+        const nodesByTag = {};
+        allTagNodes.forEach(node => {
+          if (!nodesByTag[node.tagName]) {
+            nodesByTag[node.tagName] = [];
+          }
+          nodesByTag[node.tagName].push(node);
+        });
+
+        // 为每个Tag创建optgroup
+        Object.keys(nodesByTag).forEach(tagName => {
+          const optgroup = document.createElement("optgroup");
+          optgroup.label = `🏷️ ${tagName}`;
+          
+          nodesByTag[tagName].forEach(node => {
+            const option = document.createElement("option");
+            option.value = node.nodeUrl;
+            option.textContent = node.nodeName || '未命名节点';
+            option.dataset.tagName = node.tagName;
+            optgroup.appendChild(option);
+          });
+          
+          select.appendChild(optgroup);
+        });
+      }
+
+      // 模板节点选择事件
+      function onTemplateNodeSelect() {
+        const select = document.getElementById("templateNodeSelect");
+        const selectedValue = select.value;
+        
+        if (selectedValue) {
+          // 清空手动粘贴框
+          document.getElementById("templateUrl").value = "";
+        }
+        
+        updateEstimation();
+      }
+
+      // 手动粘贴节点输入事件
+      function onTemplateUrlInput() {
+        const templateUrl = document.getElementById("templateUrl").value.trim();
+        if (templateUrl) {
+          // 清除下拉选择
+          document.getElementById("templateNodeSelect").value = "";
+        }
+        updateEstimation();
+      }
+
+      // 获取当前选中的模板节点URL
+      function getCurrentSourceNodeUrl() {
+        // 优先从下拉选择获取
+        const selectedFromDropdown = document.getElementById("templateNodeSelect").value;
+        if (selectedFromDropdown) {
+          return selectedFromDropdown;
+        }
+
+        // 其次从手动粘贴获取
+        const templateUrl = document.getElementById("templateUrl").value.trim();
+        return templateUrl;
+      }
+
+      // 提取节点名称
+      function extractNodeName(nodeUrl) {
+        try {
+          if (nodeUrl.startsWith('vless://')) {
+            const url = new URL(nodeUrl);
+            return url.hash ? decodeURIComponent(url.hash.substring(1)) : `${url.hostname}:${url.port}`;
+          } else if (nodeUrl.startsWith('vmess://')) {
+            const data = nodeUrl.substring('vmess://'.length);
+            const decoded = safeBase64Decode(data);
+            const config = JSON.parse(decoded);
+            return config.ps || `${config.add}:${config.port}`;
+          }
+        } catch (error) {
+          console.error('提取节点名称失败:', error);
+        }
+        return '未知节点';
+      }
+
+      function generateNodes() {
+        // 获取源节点URL
+        const templateLink = getCurrentSourceNodeUrl();
+
+        if (!templateLink) {
+          showAlert("请先选择或粘贴源节点！", "warning");
+          return;
+        }
+
+        // 获取数据源
+        const builtinTab = document.getElementById("builtin-tab");
+        const isBuiltinActive = builtinTab.classList.contains("active");
 
         let addresses = [];
 
-        if (dataSource === "builtin") {
-          const selectedDataset =
-            document.getElementById("builtInSelect").value;
-          if (!selectedDataset) {
-            alert("请选择一个内置数据集！");
-            return;
-          }
-          addresses = window.builtInData[selectedDataset] || [];
+        if (isBuiltinActive) {
+          // 内置数据源
+          addresses = getBuiltinAddresses();
         } else {
-          const customText = document
-            .getElementById("customAddresses")
-            .value.trim();
-          if (!customText) {
-            alert("请输入自定义地址！");
-            return;
-          }
-          addresses = customText.split("\n").filter((addr) => addr.trim());
+          // 自定义数据源
+          addresses = getCustomAddresses();
         }
 
         if (addresses.length === 0) {
-          alert("没有找到有效的地址数据！");
+          showAlert("没有找到有效的地址数据！", "warning");
           return;
         }
+
+        // 获取输出格式
+        const outputFormat = document.querySelector(
+          'input[name="outputFormat"]:checked'
+        ).value;
 
         const results = [];
         addresses.forEach((address) => {
           const generatedNode = generateSingleNode(
             templateLink,
-            address.trim()
+            address.trim(),
+            outputFormat
           );
           if (generatedNode) {
             results.push(generatedNode);
@@ -2186,35 +2320,255 @@
         document.getElementById("output").value = results.join("\n");
 
         if (results.length > 0) {
-          alert(`成功生成 ${results.length} 个节点！`);
+          showAlert(`成功生成 ${results.length} 个节点！`, "success");
         } else {
-          alert("生成失败，请检查模板链接格式！");
+          showAlert("生成失败，请检查源节点格式！", "danger");
         }
       }
 
-      function generateSingleNode(template, newAddress) {
+      // 获取内置地址数据
+      function getBuiltinAddresses() {
+        const addresses = [];
+
+        // 获取IP版本选择
+        const useIPv4 = document.getElementById("useIPv4").checked;
+        const useIPv6 = document.getElementById("useIPv6").checked;
+
+        if (!useIPv4 && !useIPv6) {
+          showAlert("请至少选择一种IP版本！", "warning");
+          return addresses;
+        }
+
+        // 获取选中的地区
+        const selectedRegions = [];
+        document
+          .querySelectorAll('#region-selector input[type="checkbox"]:checked')
+          .forEach((checkbox) => {
+            selectedRegions.push(checkbox.value);
+          });
+
+        if (selectedRegions.length === 0) {
+          showAlert("请至少选择一个地区！", "warning");
+          return addresses;
+        }
+
+        // 获取选中的端口
+        const selectedPorts = [];
+        document
+          .querySelectorAll(
+            '#builtin-https-port-selector input[type="checkbox"]:checked'
+          )
+          .forEach((checkbox) => {
+            selectedPorts.push(checkbox.value);
+          });
+
+        if (selectedPorts.length === 0) {
+          showAlert("请至少选择一个端口！", "warning");
+          return addresses;
+        }
+
+        // 从内置数据中获取地址
+        if (window.builtInData) {
+          selectedRegions.forEach((region) => {
+            if (window.builtInData[region]) {
+              window.builtInData[region].forEach((ipData) => {
+                if (useIPv4 && ipData.ipv4) {
+                  selectedPorts.forEach((port) => {
+                    addresses.push(`${ipData.ipv4}:${port}`);
+                  });
+                }
+                if (useIPv6 && ipData.ipv6) {
+                  selectedPorts.forEach((port) => {
+                    addresses.push(`[${ipData.ipv6}]:${port}`);
+                  });
+                }
+              });
+            }
+          });
+        }
+
+        return addresses;
+      }
+
+      // 获取自定义地址数据
+      function getCustomAddresses() {
+        const customText = document.getElementById("customData").value.trim();
+        if (!customText) {
+          showAlert("请输入自定义地址！", "warning");
+          return [];
+        }
+
+        const addresses = [];
+        const lines = customText.split("\n").filter((line) => line.trim());
+
+        // 获取选中的端口
+        const selectedPorts = [];
+        document
+          .querySelectorAll(
+            '#https-port-selector input[type="checkbox"]:checked'
+          )
+          .forEach((checkbox) => {
+            selectedPorts.push(checkbox.value);
+          });
+
+        if (selectedPorts.length === 0) {
+          // 如果没有选择端口，直接使用地址
+          return lines;
+        }
+
+        // 为每个地址添加端口
+        lines.forEach((line) => {
+          const trimmedLine = line.trim();
+          if (trimmedLine) {
+            selectedPorts.forEach((port) => {
+              if (trimmedLine.includes(":")) {
+                // 如果地址已经包含端口，直接使用
+                addresses.push(trimmedLine);
+              } else {
+                // 如果地址不包含端口，添加端口
+                addresses.push(`${trimmedLine}:${port}`);
+              }
+            });
+          }
+        });
+
+        return addresses;
+      }
+
+      function generateSingleNode(
+        template,
+        newAddress,
+        outputFormat = "vmess_json"
+      ) {
         try {
           if (template.startsWith("vless://")) {
-            const url = new URL(template);
-            url.hostname = newAddress;
-            if (url.hash) {
-              const originalName = decodeURIComponent(url.hash.substring(1));
-              const newName = `${originalName}-${newAddress}`;
-              url.hash = encodeURIComponent(newName);
-            }
-            return url.toString();
+            return generateVlessNode(template, newAddress, outputFormat);
           } else if (template.startsWith("vmess://")) {
-            const data = template.substring("vmess://".length);
-            const decoded = safeBase64Decode(data);
-            const config = JSON.parse(decoded);
-            config.add = newAddress;
-            config.ps = `${config.ps || "vmess"}-${newAddress}`;
-            return "vmess://" + safeBase64Encode(JSON.stringify(config));
+            return generateVmessNode(template, newAddress, outputFormat);
           }
         } catch (e) {
           console.error("生成节点失败:", e);
         }
         return null;
+      }
+
+      // 生成VLESS节点
+      function generateVlessNode(template, newAddress, outputFormat) {
+        if (outputFormat === "vless") {
+          // 保持VLESS格式
+          const url = new URL(template);
+          const [host, port] = newAddress.split(":");
+          url.hostname = host;
+          url.port = port || "443";
+
+          if (url.hash) {
+            const originalName = decodeURIComponent(url.hash.substring(1));
+            const newName = `${originalName}-${host}`;
+            url.hash = encodeURIComponent(newName);
+          }
+          return url.toString();
+        } else {
+          // 转换为VMess格式
+          const url = new URL(template);
+          const [host, port] = newAddress.split(":");
+          const uuid = url.username;
+
+          const vmessConfig = {
+            v: "2",
+            ps: `${
+              url.hash ? decodeURIComponent(url.hash.substring(1)) : "vless"
+            }-${host}`,
+            add: host,
+            port: port || "443",
+            id: uuid,
+            aid: "0",
+            net: "ws",
+            type: "none",
+            host: url.hostname,
+            path: url.pathname || "/",
+            tls: "tls",
+            sni: url.hostname,
+          };
+
+          if (outputFormat === "vmess_query") {
+            // Shadowrocket格式
+            return generateVmessQueryString(vmessConfig);
+          } else {
+            // v2rayN/U格式
+            return "vmess://" + safeBase64Encode(JSON.stringify(vmessConfig));
+          }
+        }
+      }
+
+      // 生成VMess节点
+      function generateVmessNode(template, newAddress, outputFormat) {
+        const data = template.substring("vmess://".length);
+        const decoded = safeBase64Decode(data);
+        const config = JSON.parse(decoded);
+
+        const [host, port] = newAddress.split(":");
+        config.add = host;
+        config.port = port || "443";
+        config.ps = `${config.ps || "vmess"}-${host}`;
+
+        if (outputFormat === "vless") {
+          // 转换为VLESS格式
+          return generateVlessFromVmess(config);
+        } else if (outputFormat === "vmess_query") {
+          // Shadowrocket格式
+          return generateVmessQueryString(config);
+        } else {
+          // v2rayN/U格式
+          return "vmess://" + safeBase64Encode(JSON.stringify(config));
+        }
+      }
+
+      // 从VMess配置生成VLESS链接
+      function generateVlessFromVmess(vmessConfig) {
+        const url = new URL(
+          "vless://" +
+            vmessConfig.id +
+            "@" +
+            vmessConfig.add +
+            ":" +
+            vmessConfig.port
+        );
+        url.searchParams.set("type", vmessConfig.net || "ws");
+        url.searchParams.set("security", vmessConfig.tls || "tls");
+
+        if (vmessConfig.host) {
+          url.searchParams.set("host", vmessConfig.host);
+        }
+        if (vmessConfig.path) {
+          url.searchParams.set("path", vmessConfig.path);
+        }
+        if (vmessConfig.sni) {
+          url.searchParams.set("sni", vmessConfig.sni);
+        }
+
+        url.hash = encodeURIComponent(vmessConfig.ps);
+        return url.toString();
+      }
+
+      // 生成VMess查询字符串格式（Shadowrocket）
+      function generateVmessQueryString(config) {
+        const params = new URLSearchParams();
+        params.set("v", config.v || "2");
+        params.set("ps", config.ps);
+        params.set("add", config.add);
+        params.set("port", config.port);
+        params.set("id", config.id);
+        params.set("aid", config.aid || "0");
+        params.set("net", config.net || "ws");
+        params.set("type", config.type || "none");
+        params.set("host", config.host || "");
+        params.set("path", config.path || "/");
+        params.set("tls", config.tls || "tls");
+        params.set("sni", config.sni || "");
+
+        return `vmess://${config.id}@${config.add}:${
+          config.port
+        }?${params.toString()}#${encodeURIComponent(config.ps)}`;
       }
 
       function copyResults() {
@@ -2935,6 +3289,10 @@
           .getElementById("builtin-tab")
           .classList.contains("active");
 
+        // 检查源节点是否已选择
+        const sourceNodeUrl = getCurrentSourceNodeUrl();
+        const hasSourceNode = !!sourceNodeUrl;
+
         if (isBuiltinTabActive) {
           const selectedRegions = Array.from(
             document.querySelectorAll(
@@ -3046,13 +3404,28 @@
         const selectedPorts = getSelectedPorts();
         const totalCombinations = totalAddressSources * selectedPorts.length;
 
-        // 更新显示信息，包含最大可生成数量
+        // 更新显示信息，包含最大可生成数量和源节点状态
         const estimationElement = document.getElementById("estimation");
+        let statusText = "准备就绪";
+        let statusClass = "text-muted";
+
+        if (!hasSourceNode) {
+          statusText = "⚠️ 请先选择或粘贴源节点";
+          statusClass = "text-warning";
+        } else if (totalAddressSources === 0) {
+          statusText = "⚠️ 请配置数据源";
+          statusClass = "text-warning";
+        } else {
+          statusText = "✅ 配置完成，可以生成节点";
+          statusClass = "text-success";
+        }
+
         estimationElement.innerHTML = `
                 <strong>当前配置可生成 ${totalCombinations.toLocaleString()} 个不重复的"地址:端口"组合</strong><br>
                 <small class="text-muted">地址源: ${totalAddressSources.toLocaleString()} 个 × 端口: ${
           selectedPorts.length
-        } 个 = ${totalCombinations.toLocaleString()} 个组合</small>
+        } 个 = ${totalCombinations.toLocaleString()} 个组合</small><br />
+                <small class="${statusClass}">${statusText}</small>
             `;
 
         // 存储最大可生成数量供验证使用
@@ -3506,6 +3879,15 @@
         document.querySelectorAll("#sourceTab button").forEach((tab) => {
           tab.addEventListener("shown.bs.tab", updateEstimation);
         });
+
+        // 节点生成器标签页切换事件监听器
+        const generatorTab = document.getElementById("generator-tab");
+        if (generatorTab) {
+          generatorTab.addEventListener("shown.bs.tab", function (event) {
+            console.log("切换到节点生成器标签，开始加载Tag节点...");
+            loadTagNodesForGenerator(); // 当标签显示时加载Tag节点
+          });
+        }
 
         // 智能格式选择：根据输入的模板自动选择合适的输出格式
         const templateInput = document.getElementById("templateUrl");
@@ -4119,6 +4501,15 @@
             managerTab.addEventListener("shown.bs.tab", function (event) {
               console.log("切换到订阅源管理标签，开始加载订阅源...");
               loadSubscriptionSources(); // 当标签显示时加载订阅源
+            });
+          }
+
+          // 添加源节点管理标签页切换事件监听器
+          const sourceNodesTab = document.getElementById("source-nodes-tab");
+          if (sourceNodesTab) {
+            sourceNodesTab.addEventListener("shown.bs.tab", function (event) {
+              console.log("切换到源节点管理标签，开始加载源节点...");
+              loadSourceNodes(); // 当标签显示时加载源节点
             });
           }
 
