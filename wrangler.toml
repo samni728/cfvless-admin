@@ -1,8 +1,0 @@
-name = "cfvless-admin"
-compatibility_date = "2024-01-01"
-
-[vars]
-ENVIRONMENT = "production"
-
-# 注意：对于 Pages 项目，D1 和 KV 绑定通常在 Dashboard 中配置
-# 这里的配置主要用于本地开发

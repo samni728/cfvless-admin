@@ -38,3 +38,4 @@ temp/
 
 # 部署产物目录（由 GitHub Actions 自动生成）
 public/
+bpbinfo/

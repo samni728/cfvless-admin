@@ -503,7 +503,8 @@
 const DEFAULT_PROXY_IP = "your.proxy.server.com";
 
 // 多个 ProxyIP（用逗号分隔）
-const DEFAULT_PROXY_IP = "proxy1.example.com,proxy2.example.com,proxy3.example.com";
+const DEFAULT_PROXY_IP =
+  "proxy1.example.com,proxy2.example.com,proxy3.example.com";
 ```
 
 ## 🌟 项目特色
@@ -534,6 +535,6 @@ const DEFAULT_PROXY_IP = "proxy1.example.com,proxy2.example.com,proxy3.example.c
 
 **项目地址**: [CFvless-ADMIN](https://github.com/samni728/cfvless-admin)
 
-**最后更新**: 2025 年 1 月
+**最后更新**: 2025 年 9 月
 
 **部署难度**: ⭐⭐ (适合小白用户)
