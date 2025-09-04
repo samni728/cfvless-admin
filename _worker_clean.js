@@ -846,17 +846,16 @@ export default {
           )`
         ).run();
       } catch (e) {}
-    }
 
-    if (
-      request.headers.get("upgrade") === "websocket" &&
-      url.searchParams.get("ed") === "2560"
-    ) {
-      return await h1(request, env);
-    }
+      if (
+        request.headers.get("upgrade") === "websocket" &&
+        url.searchParams.get("ed") === "2560"
+      ) {
+        return await h1(request, env);
+      }
 
-    if (url.pathname === "/api/register" && request.method === "POST") {
-      try {
+      if (url.pathname === "/api/register" && request.method === "POST") {
+        try {
         const { username, password } = await parseRequestBody(request);
 
         if (!username || !password) {
@@ -1443,7 +1442,7 @@ export default {
         }
 
         const nodeHash = g4(sourceConfig.generated_node);
-        
+
         // 添加到节点池 - 修复外键约束问题，source_id设为null
         try {
           const insertResult = await env.DB.prepare(
@@ -1509,6 +1508,7 @@ export default {
           }
         );
       }
+    }
     }
 
     return new Response("Not Found", { status: 404 });
