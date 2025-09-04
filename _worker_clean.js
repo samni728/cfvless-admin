@@ -1314,6 +1314,62 @@ export default {
       }
     }
 
+    if (url.pathname === "/api/tags" && request.method === "POST") {
+      try {
+        const user = await g9(request, env);
+        if (!user)
+          return new Response(JSON.stringify({ error: "Unauthorized" }), {
+            status: 401,
+          });
+
+        const { tag_name, description } = await parseRequestBody(request);
+        if (!tag_name || tag_name.trim().length === 0) {
+          return new Response(JSON.stringify({ error: "Tag name required" }), {
+            status: 400,
+          });
+        }
+
+        const existing = await env.DB.prepare(
+          "SELECT id FROM tags WHERE user_id = ? AND tag_name = ?"
+        )
+          .bind(user.id, tag_name.trim())
+          .first();
+
+        if (existing) {
+          return new Response(JSON.stringify({ error: "Tag name exists" }), {
+            status: 400,
+          });
+        }
+
+        const tagUuid = crypto.randomUUID();
+        await env.DB.prepare(
+          "INSERT INTO tags (user_id, tag_name, description, tag_uuid) VALUES (?, ?, ?, ?)"
+        )
+          .bind(user.id, tag_name.trim(), description || "", tagUuid)
+          .run();
+
+        return new Response(
+          JSON.stringify({
+            message: "Tag created successfully",
+            tag_uuid: tagUuid,
+          }),
+          {
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      } catch (e) {
+        return new Response(
+          JSON.stringify({
+            error: `Operation failed: ${e.message}`,
+          }),
+          {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      }
+    }
+
     if (url.pathname.includes("/import-to-tag") && request.method === "POST") {
       try {
         const user = await g9(request, env);
@@ -1359,45 +1415,83 @@ export default {
               status: 404,
             });
           }
+          targetTagId = tag.id;
+        } else {
+          // 如果没有指定tag_id，查找或创建"源节点"Tag
+          let sourceNodeTag = await env.DB.prepare(
+            "SELECT id FROM tags WHERE user_id = ? AND tag_name = ?"
+          )
+            .bind(user.id, "源节点")
+            .first();
+
+          if (!sourceNodeTag) {
+            // 创建"源节点"Tag
+            const result = await env.DB.prepare(
+              "INSERT INTO tags (user_id, tag_name, tag_uuid, description) VALUES (?, ?, ?, ?)"
+            )
+              .bind(
+                user.id,
+                "源节点",
+                crypto.randomUUID(),
+                "系统自动创建的源节点Tag"
+              )
+              .run();
+            targetTagId = result.meta.last_row_id;
+          } else {
+            targetTagId = sourceNodeTag.id;
+          }
         }
 
         const nodeHash = g4(sourceConfig.generated_node);
-        const existingNode = await env.DB.prepare(
-          "SELECT id FROM node_pool WHERE user_id = ? AND node_hash = ?"
-        )
-          .bind(user.id, nodeHash)
-          .first();
-
-        let nodeId;
-        if (existingNode) {
-          nodeId = existingNode.id;
-        } else {
+        
+        // 添加到节点池 - 修复外键约束问题，source_id设为null
+        try {
           const insertResult = await env.DB.prepare(
-            "INSERT INTO node_pool (user_id, source_id, node_url, node_hash, status) VALUES (?, ?, ?, ?, ?)"
+            "INSERT OR IGNORE INTO node_pool (user_id, source_id, node_url, node_hash, status) VALUES (?, ?, ?, ?, 'active')"
           )
             .bind(
               user.id,
-              null,
+              null, // source_id设为null，因为这是从源节点配置导入的，不是从订阅源导入的
               sourceConfig.generated_node,
-              nodeHash,
-              "active"
+              nodeHash
             )
             .run();
-          nodeId = insertResult.meta.last_row_id;
-        }
 
-        if (targetTagId) {
+          let nodeId;
+          if (insertResult.meta.changes > 0) {
+            // 新插入的节点
+            nodeId = insertResult.meta.last_row_id;
+          } else {
+            // 节点已存在，查找现有节点ID
+            const existingNode = await env.DB.prepare(
+              "SELECT id FROM node_pool WHERE user_id = ? AND node_hash = ?"
+            )
+              .bind(user.id, nodeHash)
+              .first();
+            nodeId = existingNode.id;
+          }
+
+          // 将节点添加到Tag
           await env.DB.prepare(
             "INSERT OR IGNORE INTO node_tag_map (tag_id, node_id) VALUES (?, ?)"
           )
-            .bind(parseInt(targetTagId), nodeId)
+            .bind(targetTagId, nodeId)
             .run();
+        } catch (error) {
+          return new Response(
+            JSON.stringify({
+              error: `Failed to import node: ${error.message}`,
+            }),
+            {
+              status: 500,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
         }
 
         return new Response(
           JSON.stringify({
             message: "Import successful",
-            node_id: nodeId,
             tag_id: targetTagId,
           }),
           {
