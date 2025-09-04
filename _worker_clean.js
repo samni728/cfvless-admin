@@ -856,630 +856,61 @@ export default {
 
       if (url.pathname === "/api/register" && request.method === "POST") {
         try {
-        const { username, password } = await parseRequestBody(request);
+          const { username, password } = await parseRequestBody(request);
 
-        if (!username || !password) {
-          return new Response(
-            JSON.stringify({ error: "Username and password required" }),
-            {
-              status: 400,
-              headers: { "Content-Type": "application/json" },
-            }
-          );
-        }
-
-        const existingUser = await env.DB.prepare(
-          "SELECT id FROM users WHERE username = ?"
-        )
-          .bind(username)
-          .first();
-
-        if (existingUser) {
-          return new Response(JSON.stringify({ error: "Username exists" }), {
-            status: 400,
-            headers: { "Content-Type": "application/json" },
-          });
-        }
-
-        const hashedPassword = await hashPassword(password);
-        const userUuid = crypto.randomUUID();
-
-        const passwordColumn = await getPasswordColumnName(env);
-        const insertResult = await env.DB.prepare(
-          `INSERT INTO users (username, ${passwordColumn}, user_uuid) VALUES (?, ?, ?)`
-        )
-          .bind(username, hashedPassword, userUuid)
-          .run();
-
-        const newUserId = insertResult.meta.last_row_id;
-
-        if (newUserId) {
-          const currentHostName =
-            request.headers.get("Host") || "your-worker.workers.dev";
-          await g3(newUserId, userUuid, env, currentHostName);
-        }
-
-        return new Response(
-          JSON.stringify({ message: "Registration successful" }),
-          {
-            status: 201,
-            headers: { "Content-Type": "application/json" },
-          }
-        );
-      } catch (e) {
-        return new Response(
-          JSON.stringify({
-            error: "Registration failed",
-            details: e.message,
-          }),
-          {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-          }
-        );
-      }
-    }
-
-    if (url.pathname === "/api/login" && request.method === "POST") {
-      try {
-        const { username, password } = await parseRequestBody(request);
-
-        const user = await env.DB.prepare(
-          "SELECT * FROM users WHERE username = ?"
-        )
-          .bind(username)
-          .first();
-
-        const passwordColumn = await getPasswordColumnName(env);
-        if (!user || (await hashPassword(password)) !== user[passwordColumn]) {
-          return new Response(
-            JSON.stringify({ error: "Invalid credentials" }),
-            {
-              status: 401,
-              headers: { "Content-Type": "application/json" },
-            }
-          );
-        }
-
-        const sessionId = crypto.randomUUID();
-        const expiresAt = new Date(
-          Date.now() + 7 * 24 * 60 * 60 * 1000
-        ).toISOString();
-
-        await env.DB.prepare(
-          "INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)"
-        )
-          .bind(sessionId, user.id, expiresAt)
-          .run();
-
-        const response = new Response(
-          JSON.stringify({
-            message: "Login successful",
-            username: user.username,
-          }),
-          {
-            headers: { "Content-Type": "application/json" },
-          }
-        );
-        response.headers.set(
-          "Set-Cookie",
-          `session=${sessionId}; HttpOnly; Secure; SameSite=Strict; Max-Age=${
-            86400 * 7
-          }; Path=/`
-        );
-        return response;
-      } catch (e) {
-        return new Response(
-          JSON.stringify({
-            error: "Login failed",
-            details: e.message,
-          }),
-          {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-          }
-        );
-      }
-    }
-
-    if (url.pathname === "/api/logout" && request.method === "POST") {
-      const sessionId = request.headers
-        .get("cookie")
-        ?.split("; ")
-        .find((cookie) => cookie.startsWith("session="))
-        ?.split("=")[1];
-
-      if (sessionId) {
-        await env.DB.prepare("DELETE FROM sessions WHERE id = ?")
-          .bind(sessionId)
-          .run();
-      }
-
-      const response = new Response(
-        JSON.stringify({ message: "Logout successful" })
-      );
-      response.headers.set(
-        "Set-Cookie",
-        "session=; HttpOnly; Secure; SameSite=Strict; Max-Age=0; Path=/"
-      );
-      return response;
-    }
-
-    if (url.pathname === "/api/status" && request.method === "GET") {
-      const user = await g9(request, env);
-      if (!user) {
-        return new Response(JSON.stringify({ authenticated: false }), {
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-
-      return new Response(
-        JSON.stringify({
-          authenticated: true,
-          username: user.username,
-          user_uuid: user.user_uuid,
-        }),
-        {
-          headers: { "Content-Type": "application/json" },
-        }
-      );
-    }
-
-    if (url.pathname === "/api/tags" && request.method === "GET") {
-      try {
-        const user = await g9(request, env);
-        if (!user)
-          return new Response(JSON.stringify({ error: "Unauthorized" }), {
-            status: 401,
-          });
-
-        const { results: tags } = await env.DB.prepare(
-          `SELECT id, tag_name, description, tag_uuid, created_at FROM tags WHERE user_id = ? ORDER BY created_at DESC`
-        )
-          .bind(user.id)
-          .all();
-
-        if (!tags || tags.length === 0) {
-          return new Response(JSON.stringify([]), {
-            headers: { "Content-Type": "application/json" },
-          });
-        }
-
-        const tagIds = tags.map((t) => t.id);
-        const placeholders = tagIds.map(() => "?").join(",");
-
-        const { results: counts } = await env.DB.prepare(
-          `SELECT tag_id, COUNT(node_id) as node_count, SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_count FROM node_tag_map LEFT JOIN node_pool ON node_pool.id = node_tag_map.node_id WHERE tag_id IN (${placeholders}) GROUP BY tag_id`
-        )
-          .bind(...tagIds)
-          .all();
-
-        const countMap = new Map(
-          counts.map((c) => [
-            c.tag_id,
-            { node_count: c.node_count, active_count: c.active_count || 0 },
-          ])
-        );
-
-        const resultsWithCounts = tags.map((tag) => ({
-          ...tag,
-          node_count: countMap.get(tag.id)?.node_count || 0,
-          active_count: countMap.get(tag.id)?.active_count || 0,
-        }));
-
-        return new Response(JSON.stringify(resultsWithCounts), {
-          headers: { "Content-Type": "application/json" },
-        });
-      } catch (e) {
-        return new Response(
-          JSON.stringify({
-            error: `Operation failed: ${e.message}`,
-          }),
-          {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-          }
-        );
-      }
-    }
-
-    if (url.pathname === "/api/source-nodes" && request.method === "GET") {
-      try {
-        const user = await g9(request, env);
-        if (!user)
-          return new Response(JSON.stringify({ error: "Unauthorized" }), {
-            status: 401,
-          });
-
-        const { results } = await env.DB.prepare(
-          `SELECT id, config_name, node_type, config_data, generated_node, is_default, enabled, created_at FROM source_node_configs WHERE user_id = ? ORDER BY is_default DESC, created_at DESC`
-        )
-          .bind(user.id)
-          .all();
-
-        return new Response(JSON.stringify(results || []), {
-          headers: { "Content-Type": "application/json" },
-        });
-      } catch (e) {
-        return new Response(
-          JSON.stringify({
-            error: `Operation failed: ${e.message}`,
-          }),
-          {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-          }
-        );
-      }
-    }
-
-    if (url.pathname === "/api/source-nodes" && request.method === "POST") {
-      try {
-        const user = await g9(request, env);
-        if (!user)
-          return new Response(JSON.stringify({ error: "Unauthorized" }), {
-            status: 401,
-          });
-
-        const { config_name, node_type, config_data } = await request.json();
-
-        if (node_type === "proxyip") {
-          config_data.domain =
-            request.headers.get("Host") || "your-domain.pages.dev";
-
-          if (config_data.uuid !== user.user_uuid) {
-            config_data.uuid = user.user_uuid;
-          }
-        }
-
-        if (!node_type || !config_data) {
-          return new Response(
-            JSON.stringify({ error: "Node type and config data required" }),
-            {
-              status: 400,
-            }
-          );
-        }
-
-        if (!["nat64", "proxyip"].includes(node_type)) {
-          return new Response(
-            JSON.stringify({ error: "Node type must be nat64 or proxyip" }),
-            {
-              status: 400,
-            }
-          );
-        }
-
-        let generatedNode;
-        if (node_type === "nat64") {
-          if (!config_data.uuid) {
+          if (!username || !password) {
             return new Response(
-              JSON.stringify({ error: "NAT64 config requires uuid parameter" }),
+              JSON.stringify({ error: "Username and password required" }),
               {
                 status: 400,
-              }
-            );
-          }
-          generatedNode = g1(config_data.uuid);
-        } else if (node_type === "proxyip") {
-          if (!config_data.uuid) {
-            return new Response(
-              JSON.stringify({
-                error: "ProxyIP config requires uuid parameter",
-              }),
-              {
-                status: 400,
+                headers: { "Content-Type": "application/json" },
               }
             );
           }
 
-          if (config_data.proxyIPs && !Array.isArray(config_data.proxyIPs)) {
-            return new Response(
-              JSON.stringify({ error: "proxyIPs must be array format" }),
-              {
-                status: 400,
-              }
-            );
-          }
-
-          generatedNode = g2(config_data, config_name);
-        }
-
-        const nodeHash = g4(generatedNode);
-
-        const insertResult = await env.DB.prepare(
-          "INSERT INTO source_node_configs (user_id, config_name, node_type, config_data, generated_node, is_default, enabled) VALUES (?, ?, ?, ?, ?, ?, ?)"
-        )
-          .bind(
-            user.id,
-            config_name,
-            node_type,
-            JSON.stringify(config_data),
-            generatedNode,
-            false,
-            true
+          const existingUser = await env.DB.prepare(
+            "SELECT id FROM users WHERE username = ?"
           )
-          .run();
-
-        const sourceNodeId = insertResult.meta.last_row_id;
-
-        if (nodeHash && sourceNodeId) {
-          await env.DB.prepare(
-            "INSERT OR IGNORE INTO node_pool (user_id, source_id, node_url, node_hash, status) VALUES (?, ?, ?, ?, ?)"
-          )
-            .bind(user.id, sourceNodeId, generatedNode, nodeHash, "active")
-            .run();
-        }
-
-        return new Response(
-          JSON.stringify({
-            message: "Source node configuration created successfully",
-            config_id: sourceNodeId,
-            generated_node: generatedNode,
-            config_data: {
-              uuid: config_data.uuid,
-              domain: config_data.domain,
-              proxyIPs: config_data.proxyIPs,
-            },
-          }),
-          {
-            headers: { "Content-Type": "application/json" },
-          }
-        );
-      } catch (e) {
-        return new Response(
-          JSON.stringify({
-            error: "Operation failed",
-            details: e.message,
-          }),
-          {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-          }
-        );
-      }
-    }
-
-    if (url.pathname === "/api/nodes" && request.method === "GET") {
-      try {
-        const user = await g9(request, env);
-        if (!user)
-          return new Response(JSON.stringify({ error: "Unauthorized" }), {
-            status: 401,
-          });
-
-        const { results } = await env.DB.prepare(
-          `SELECT p.id, p.node_url, p.created_at, s.source_name FROM node_pool p JOIN subscription_sources s ON p.source_id = s.id WHERE p.user_id = ? ORDER BY s.source_name, p.id`
-        )
-          .bind(user.id)
-          .all();
-
-        const nodesWithNames = results.map((node) => {
-          const protocol = node.node_url.split("://")[0] || "unknown";
-          return {
-            ...node,
-            node_name: "Node",
-            protocol: protocol,
-            server: "unknown",
-          };
-        });
-
-        return new Response(JSON.stringify(nodesWithNames || []), {
-          headers: { "Content-Type": "application/json" },
-        });
-      } catch (e) {
-        return new Response(
-          JSON.stringify({
-            error: `Operation failed: ${e.message}`,
-          }),
-          {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-          }
-        );
-      }
-    }
-
-    if (
-      url.pathname === "/api/subscription-sources" &&
-      request.method === "GET"
-    ) {
-      try {
-        const user = await g9(request, env);
-        if (!user)
-          return new Response(JSON.stringify({ error: "Unauthorized" }), {
-            status: 401,
-          });
-
-        const { results } = await env.DB.prepare(
-          "SELECT id, source_name, source_url, fetch_status, node_count, last_fetch_at FROM subscription_sources WHERE user_id = ? ORDER BY created_at DESC"
-        )
-          .bind(user.id)
-          .all();
-
-        return new Response(JSON.stringify(results || []), {
-          headers: { "Content-Type": "application/json" },
-        });
-      } catch (e) {
-        return new Response(
-          JSON.stringify({
-            error: `Operation failed: ${e.message}`,
-          }),
-          {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-          }
-        );
-      }
-    }
-
-    if (url.pathname === "/api/tags" && request.method === "POST") {
-      try {
-        const user = await g9(request, env);
-        if (!user)
-          return new Response(JSON.stringify({ error: "Unauthorized" }), {
-            status: 401,
-          });
-
-        const { tag_name, description } = await parseRequestBody(request);
-        if (!tag_name || tag_name.trim().length === 0) {
-          return new Response(JSON.stringify({ error: "Tag name required" }), {
-            status: 400,
-          });
-        }
-
-        const existing = await env.DB.prepare(
-          "SELECT id FROM tags WHERE user_id = ? AND tag_name = ?"
-        )
-          .bind(user.id, tag_name.trim())
-          .first();
-
-        if (existing) {
-          return new Response(JSON.stringify({ error: "Tag name exists" }), {
-            status: 400,
-          });
-        }
-
-        const tagUuid = crypto.randomUUID();
-        await env.DB.prepare(
-          "INSERT INTO tags (user_id, tag_name, description, tag_uuid) VALUES (?, ?, ?, ?)"
-        )
-          .bind(user.id, tag_name.trim(), description || "", tagUuid)
-          .run();
-
-        return new Response(
-          JSON.stringify({
-            message: "Tag created successfully",
-            tag_uuid: tagUuid,
-          }),
-          {
-            headers: { "Content-Type": "application/json" },
-          }
-        );
-      } catch (e) {
-        return new Response(
-          JSON.stringify({
-            error: `Operation failed: ${e.message}`,
-          }),
-          {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-          }
-        );
-      }
-    }
-
-    if (url.pathname.includes("/import-to-tag") && request.method === "POST") {
-      try {
-        const user = await g9(request, env);
-        if (!user)
-          return new Response(JSON.stringify({ error: "Unauthorized" }), {
-            status: 401,
-          });
-
-        const configId = url.pathname.split("/")[3];
-        if (!configId || isNaN(parseInt(configId))) {
-          return new Response(JSON.stringify({ error: "Invalid config ID" }), {
-            status: 400,
-          });
-        }
-
-        const { tag_id } = await parseRequestBody(request);
-
-        const sourceConfig = await env.DB.prepare(
-          "SELECT id, config_name, generated_node FROM source_node_configs WHERE user_id = ? AND id = ?"
-        )
-          .bind(user.id, parseInt(configId))
-          .first();
-
-        if (!sourceConfig) {
-          return new Response(
-            JSON.stringify({ error: "Source config not found" }),
-            {
-              status: 404,
-            }
-          );
-        }
-
-        let targetTagId = tag_id;
-        if (tag_id) {
-          const tag = await env.DB.prepare(
-            "SELECT id, tag_name FROM tags WHERE user_id = ? AND id = ?"
-          )
-            .bind(user.id, parseInt(tag_id))
+            .bind(username)
             .first();
 
-          if (!tag) {
-            return new Response(JSON.stringify({ error: "Tag not found" }), {
-              status: 404,
+          if (existingUser) {
+            return new Response(JSON.stringify({ error: "Username exists" }), {
+              status: 400,
+              headers: { "Content-Type": "application/json" },
             });
           }
-          targetTagId = tag.id;
-        } else {
-          // 如果没有指定tag_id，查找或创建"源节点"Tag
-          let sourceNodeTag = await env.DB.prepare(
-            "SELECT id FROM tags WHERE user_id = ? AND tag_name = ?"
-          )
-            .bind(user.id, "源节点")
-            .first();
 
-          if (!sourceNodeTag) {
-            // 创建"源节点"Tag
-            const result = await env.DB.prepare(
-              "INSERT INTO tags (user_id, tag_name, tag_uuid, description) VALUES (?, ?, ?, ?)"
-            )
-              .bind(
-                user.id,
-                "源节点",
-                crypto.randomUUID(),
-                "系统自动创建的源节点Tag"
-              )
-              .run();
-            targetTagId = result.meta.last_row_id;
-          } else {
-            targetTagId = sourceNodeTag.id;
-          }
-        }
+          const hashedPassword = await hashPassword(password);
+          const userUuid = crypto.randomUUID();
 
-        const nodeHash = g4(sourceConfig.generated_node);
-
-        // 添加到节点池 - 修复外键约束问题，source_id设为null
-        try {
+          const passwordColumn = await getPasswordColumnName(env);
           const insertResult = await env.DB.prepare(
-            "INSERT OR IGNORE INTO node_pool (user_id, source_id, node_url, node_hash, status) VALUES (?, ?, ?, ?, 'active')"
+            `INSERT INTO users (username, ${passwordColumn}, user_uuid) VALUES (?, ?, ?)`
           )
-            .bind(
-              user.id,
-              null, // source_id设为null，因为这是从源节点配置导入的，不是从订阅源导入的
-              sourceConfig.generated_node,
-              nodeHash
-            )
+            .bind(username, hashedPassword, userUuid)
             .run();
 
-          let nodeId;
-          if (insertResult.meta.changes > 0) {
-            // 新插入的节点
-            nodeId = insertResult.meta.last_row_id;
-          } else {
-            // 节点已存在，查找现有节点ID
-            const existingNode = await env.DB.prepare(
-              "SELECT id FROM node_pool WHERE user_id = ? AND node_hash = ?"
-            )
-              .bind(user.id, nodeHash)
-              .first();
-            nodeId = existingNode.id;
+          const newUserId = insertResult.meta.last_row_id;
+
+          if (newUserId) {
+            const currentHostName =
+              request.headers.get("Host") || "your-worker.workers.dev";
+            await g3(newUserId, userUuid, env, currentHostName);
           }
 
-          // 将节点添加到Tag
-          await env.DB.prepare(
-            "INSERT OR IGNORE INTO node_tag_map (tag_id, node_id) VALUES (?, ?)"
-          )
-            .bind(targetTagId, nodeId)
-            .run();
-        } catch (error) {
+          return new Response(
+            JSON.stringify({ message: "Registration successful" }),
+            {
+              status: 201,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        } catch (e) {
           return new Response(
             JSON.stringify({
-              error: `Failed to import node: ${error.message}`,
+              error: "Registration failed",
+              details: e.message,
             }),
             {
               status: 500,
@@ -1487,28 +918,685 @@ export default {
             }
           );
         }
+      }
+
+      if (url.pathname === "/api/login" && request.method === "POST") {
+        try {
+          const { username, password } = await parseRequestBody(request);
+
+          const user = await env.DB.prepare(
+            "SELECT * FROM users WHERE username = ?"
+          )
+            .bind(username)
+            .first();
+
+          const passwordColumn = await getPasswordColumnName(env);
+          if (
+            !user ||
+            (await hashPassword(password)) !== user[passwordColumn]
+          ) {
+            return new Response(
+              JSON.stringify({ error: "Invalid credentials" }),
+              {
+                status: 401,
+                headers: { "Content-Type": "application/json" },
+              }
+            );
+          }
+
+          const sessionId = crypto.randomUUID();
+          const expiresAt = new Date(
+            Date.now() + 7 * 24 * 60 * 60 * 1000
+          ).toISOString();
+
+          await env.DB.prepare(
+            "INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)"
+          )
+            .bind(sessionId, user.id, expiresAt)
+            .run();
+
+          const response = new Response(
+            JSON.stringify({
+              message: "Login successful",
+              username: user.username,
+            }),
+            {
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+          response.headers.set(
+            "Set-Cookie",
+            `session=${sessionId}; HttpOnly; Secure; SameSite=Strict; Max-Age=${
+              86400 * 7
+            }; Path=/`
+          );
+          return response;
+        } catch (e) {
+          return new Response(
+            JSON.stringify({
+              error: "Login failed",
+              details: e.message,
+            }),
+            {
+              status: 500,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        }
+      }
+
+      if (url.pathname === "/api/logout" && request.method === "POST") {
+        const sessionId = request.headers
+          .get("cookie")
+          ?.split("; ")
+          .find((cookie) => cookie.startsWith("session="))
+          ?.split("=")[1];
+
+        if (sessionId) {
+          await env.DB.prepare("DELETE FROM sessions WHERE id = ?")
+            .bind(sessionId)
+            .run();
+        }
+
+        const response = new Response(
+          JSON.stringify({ message: "Logout successful" })
+        );
+        response.headers.set(
+          "Set-Cookie",
+          "session=; HttpOnly; Secure; SameSite=Strict; Max-Age=0; Path=/"
+        );
+        return response;
+      }
+
+      if (url.pathname === "/api/status" && request.method === "GET") {
+        const user = await g9(request, env);
+        if (!user) {
+          return new Response(JSON.stringify({ authenticated: false }), {
+            headers: { "Content-Type": "application/json" },
+          });
+        }
 
         return new Response(
           JSON.stringify({
-            message: "Import successful",
-            tag_id: targetTagId,
+            authenticated: true,
+            username: user.username,
+            user_uuid: user.user_uuid,
           }),
           {
-            headers: { "Content-Type": "application/json" },
-          }
-        );
-      } catch (e) {
-        return new Response(
-          JSON.stringify({
-            error: `Operation failed: ${e.message}`,
-          }),
-          {
-            status: 500,
             headers: { "Content-Type": "application/json" },
           }
         );
       }
-    }
+
+      if (url.pathname === "/api/tags" && request.method === "GET") {
+        try {
+          const user = await g9(request, env);
+          if (!user)
+            return new Response(JSON.stringify({ error: "Unauthorized" }), {
+              status: 401,
+            });
+
+          const { results: tags } = await env.DB.prepare(
+            `SELECT id, tag_name, description, tag_uuid, created_at FROM tags WHERE user_id = ? ORDER BY created_at DESC`
+          )
+            .bind(user.id)
+            .all();
+
+          if (!tags || tags.length === 0) {
+            return new Response(JSON.stringify([]), {
+              headers: { "Content-Type": "application/json" },
+            });
+          }
+
+          const tagIds = tags.map((t) => t.id);
+          const placeholders = tagIds.map(() => "?").join(",");
+
+          const { results: counts } = await env.DB.prepare(
+            `SELECT tag_id, COUNT(node_id) as node_count, SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_count FROM node_tag_map LEFT JOIN node_pool ON node_pool.id = node_tag_map.node_id WHERE tag_id IN (${placeholders}) GROUP BY tag_id`
+          )
+            .bind(...tagIds)
+            .all();
+
+          const countMap = new Map(
+            counts.map((c) => [
+              c.tag_id,
+              { node_count: c.node_count, active_count: c.active_count || 0 },
+            ])
+          );
+
+          const resultsWithCounts = tags.map((tag) => ({
+            ...tag,
+            node_count: countMap.get(tag.id)?.node_count || 0,
+            active_count: countMap.get(tag.id)?.active_count || 0,
+          }));
+
+          return new Response(JSON.stringify(resultsWithCounts), {
+            headers: { "Content-Type": "application/json" },
+          });
+        } catch (e) {
+          return new Response(
+            JSON.stringify({
+              error: `Operation failed: ${e.message}`,
+            }),
+            {
+              status: 500,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        }
+      }
+
+      if (url.pathname === "/api/source-nodes" && request.method === "GET") {
+        try {
+          const user = await g9(request, env);
+          if (!user)
+            return new Response(JSON.stringify({ error: "Unauthorized" }), {
+              status: 401,
+            });
+
+          const { results } = await env.DB.prepare(
+            `SELECT id, config_name, node_type, config_data, generated_node, is_default, enabled, created_at FROM source_node_configs WHERE user_id = ? ORDER BY is_default DESC, created_at DESC`
+          )
+            .bind(user.id)
+            .all();
+
+          return new Response(JSON.stringify(results || []), {
+            headers: { "Content-Type": "application/json" },
+          });
+        } catch (e) {
+          return new Response(
+            JSON.stringify({
+              error: `Operation failed: ${e.message}`,
+            }),
+            {
+              status: 500,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        }
+      }
+
+      if (url.pathname === "/api/source-nodes" && request.method === "POST") {
+        try {
+          const user = await g9(request, env);
+          if (!user)
+            return new Response(JSON.stringify({ error: "Unauthorized" }), {
+              status: 401,
+            });
+
+                     const { config_name, node_type, config_data } = await parseRequestBody(request);
+
+          if (node_type === "proxyip") {
+            config_data.domain =
+              request.headers.get("Host") || "your-domain.pages.dev";
+
+            if (config_data.uuid !== user.user_uuid) {
+              config_data.uuid = user.user_uuid;
+            }
+          }
+
+          if (!node_type || !config_data) {
+            return new Response(
+              JSON.stringify({ error: "Node type and config data required" }),
+              {
+                status: 400,
+              }
+            );
+          }
+
+          if (!["nat64", "proxyip"].includes(node_type)) {
+            return new Response(
+              JSON.stringify({ error: "Node type must be nat64 or proxyip" }),
+              {
+                status: 400,
+              }
+            );
+          }
+
+          let generatedNode;
+          if (node_type === "nat64") {
+            if (!config_data.uuid) {
+              return new Response(
+                JSON.stringify({
+                  error: "NAT64 config requires uuid parameter",
+                }),
+                {
+                  status: 400,
+                }
+              );
+            }
+            generatedNode = g1(config_data.uuid);
+          } else if (node_type === "proxyip") {
+            if (!config_data.uuid) {
+              return new Response(
+                JSON.stringify({
+                  error: "ProxyIP config requires uuid parameter",
+                }),
+                {
+                  status: 400,
+                }
+              );
+            }
+
+            if (config_data.proxyIPs && !Array.isArray(config_data.proxyIPs)) {
+              return new Response(
+                JSON.stringify({ error: "proxyIPs must be array format" }),
+                {
+                  status: 400,
+                }
+              );
+            }
+
+            generatedNode = g2(config_data, config_name);
+          }
+
+          const nodeHash = g4(generatedNode);
+
+          const insertResult = await env.DB.prepare(
+            "INSERT INTO source_node_configs (user_id, config_name, node_type, config_data, generated_node, is_default, enabled) VALUES (?, ?, ?, ?, ?, ?, ?)"
+          )
+            .bind(
+              user.id,
+              config_name,
+              node_type,
+              JSON.stringify(config_data),
+              generatedNode,
+              false,
+              true
+            )
+            .run();
+
+          const sourceNodeId = insertResult.meta.last_row_id;
+
+          if (nodeHash && sourceNodeId) {
+            await env.DB.prepare(
+              "INSERT OR IGNORE INTO node_pool (user_id, source_id, node_url, node_hash, status) VALUES (?, ?, ?, ?, ?)"
+            )
+              .bind(user.id, sourceNodeId, generatedNode, nodeHash, "active")
+              .run();
+          }
+
+          return new Response(
+            JSON.stringify({
+              message: "Source node configuration created successfully",
+              config_id: sourceNodeId,
+              generated_node: generatedNode,
+              config_data: {
+                uuid: config_data.uuid,
+                domain: config_data.domain,
+                proxyIPs: config_data.proxyIPs,
+              },
+            }),
+            {
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        } catch (e) {
+          return new Response(
+            JSON.stringify({
+              error: "Operation failed",
+              details: e.message,
+            }),
+            {
+              status: 500,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        }
+      }
+
+      if (url.pathname === "/api/nodes" && request.method === "GET") {
+        try {
+          const user = await g9(request, env);
+          if (!user)
+            return new Response(JSON.stringify({ error: "Unauthorized" }), {
+              status: 401,
+            });
+
+          const { results } = await env.DB.prepare(
+            `SELECT p.id, p.node_url, p.created_at, s.source_name FROM node_pool p LEFT JOIN subscription_sources s ON p.source_id = s.id WHERE p.user_id = ? ORDER BY s.source_name, p.id`
+          )
+            .bind(user.id)
+            .all();
+
+          const nodesWithNames = results.map((node) => {
+            const protocol = node.node_url.split("://")[0] || "unknown";
+            return {
+              ...node,
+              node_name: "Node",
+              protocol: protocol,
+              server: "unknown",
+            };
+          });
+
+          return new Response(JSON.stringify(nodesWithNames || []), {
+            headers: { "Content-Type": "application/json" },
+          });
+        } catch (e) {
+          return new Response(
+            JSON.stringify({
+              error: `Operation failed: ${e.message}`,
+            }),
+            {
+              status: 500,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        }
+      }
+
+      if (
+        url.pathname === "/api/subscription-sources" &&
+        request.method === "GET"
+      ) {
+        try {
+          const user = await g9(request, env);
+          if (!user)
+            return new Response(JSON.stringify({ error: "Unauthorized" }), {
+              status: 401,
+            });
+
+          const { results } = await env.DB.prepare(
+            "SELECT id, source_name, source_url, fetch_status, node_count, last_fetch_at FROM subscription_sources WHERE user_id = ? ORDER BY created_at DESC"
+          )
+            .bind(user.id)
+            .all();
+
+          return new Response(JSON.stringify(results || []), {
+            headers: { "Content-Type": "application/json" },
+          });
+        } catch (e) {
+          return new Response(
+            JSON.stringify({
+              error: `Operation failed: ${e.message}`,
+            }),
+            {
+              status: 500,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        }
+      }
+
+      if (url.pathname === "/api/tags" && request.method === "POST") {
+        try {
+          const user = await g9(request, env);
+          if (!user)
+            return new Response(JSON.stringify({ error: "Unauthorized" }), {
+              status: 401,
+            });
+
+          const { tag_name, description } = await parseRequestBody(request);
+          if (!tag_name || tag_name.trim().length === 0) {
+            return new Response(
+              JSON.stringify({ error: "Tag name required" }),
+              {
+                status: 400,
+              }
+            );
+          }
+
+          const existing = await env.DB.prepare(
+            "SELECT id FROM tags WHERE user_id = ? AND tag_name = ?"
+          )
+            .bind(user.id, tag_name.trim())
+            .first();
+
+          if (existing) {
+            return new Response(JSON.stringify({ error: "Tag name exists" }), {
+              status: 400,
+            });
+          }
+
+          const tagUuid = crypto.randomUUID();
+          await env.DB.prepare(
+            "INSERT INTO tags (user_id, tag_name, description, tag_uuid) VALUES (?, ?, ?, ?)"
+          )
+            .bind(user.id, tag_name.trim(), description || "", tagUuid)
+            .run();
+
+          return new Response(
+            JSON.stringify({
+              message: "Tag created successfully",
+              tag_uuid: tagUuid,
+            }),
+            {
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        } catch (e) {
+          return new Response(
+            JSON.stringify({
+              error: `Operation failed: ${e.message}`,
+            }),
+            {
+              status: 500,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        }
+      }
+
+             if (
+         url.pathname === "/api/proxyip-config-template" &&
+         request.method === "GET"
+       ) {
+         try {
+           const user = await g9(request, env);
+           if (!user)
+             return new Response(JSON.stringify({ error: "Unauthorized" }), {
+               status: 401,
+             });
+
+           const template = {
+             config_template: {
+               uuid: user.user_uuid,
+               domain: request.headers.get("Host") || "your-domain.pages.dev",
+               proxyIPs: [d1],
+               port: 443,
+               fingerprint: "randomized",
+               alpn: "http/1.1",
+             },
+             validation_rules: {
+               uuid: {
+                 required: true,
+                 pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                 description: "Valid UUID format",
+               },
+               domain: {
+                 required: false,
+                 pattern: "^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$",
+                 description: "Valid domain format",
+               },
+               proxyIPs: {
+                 required: true,
+                 type: "array",
+                 description: "ProxyIP address list",
+               },
+               port: {
+                 required: false,
+                 min: 1,
+                 max: 65535,
+                 default: 443,
+                 description: "Port number (1-65535)",
+               },
+               fingerprint: {
+                 required: false,
+                 options: ["chrome", "firefox", "safari", "randomized", "android", "edge", "360", "qq"],
+                 default: "randomized",
+                 description: "TLS fingerprint",
+               },
+               alpn: {
+                 required: false,
+                 options: ["http/1.1", "h2", "h3", "h2,http/1.1"],
+                 default: "http/1.1",
+                 description: "ALPN protocol",
+               },
+             },
+           };
+
+           return new Response(JSON.stringify(template), {
+             headers: { "Content-Type": "application/json" },
+           });
+         } catch (e) {
+           return new Response(
+             JSON.stringify({
+               error: `Operation failed: ${e.message}`,
+             }),
+             {
+               status: 500,
+               headers: { "Content-Type": "application/json" },
+             }
+           );
+         }
+       }
+
+       if (
+         url.pathname.includes("/import-to-tag") &&
+         request.method === "POST"
+       ) {
+        try {
+          const user = await g9(request, env);
+          if (!user)
+            return new Response(JSON.stringify({ error: "Unauthorized" }), {
+              status: 401,
+            });
+
+          const configId = url.pathname.split("/")[3];
+          if (!configId || isNaN(parseInt(configId))) {
+            return new Response(
+              JSON.stringify({ error: "Invalid config ID" }),
+              {
+                status: 400,
+              }
+            );
+          }
+
+          const { tag_id } = await parseRequestBody(request);
+
+          const sourceConfig = await env.DB.prepare(
+            "SELECT id, config_name, generated_node FROM source_node_configs WHERE user_id = ? AND id = ?"
+          )
+            .bind(user.id, parseInt(configId))
+            .first();
+
+          if (!sourceConfig) {
+            return new Response(
+              JSON.stringify({ error: "Source config not found" }),
+              {
+                status: 404,
+              }
+            );
+          }
+
+          let targetTagId = tag_id;
+          if (tag_id) {
+            const tag = await env.DB.prepare(
+              "SELECT id, tag_name FROM tags WHERE user_id = ? AND id = ?"
+            )
+              .bind(user.id, parseInt(tag_id))
+              .first();
+
+            if (!tag) {
+              return new Response(JSON.stringify({ error: "Tag not found" }), {
+                status: 404,
+              });
+            }
+            targetTagId = tag.id;
+          } else {
+            // 如果没有指定tag_id，查找或创建"源节点"Tag
+            let sourceNodeTag = await env.DB.prepare(
+              "SELECT id FROM tags WHERE user_id = ? AND tag_name = ?"
+            )
+              .bind(user.id, "源节点")
+              .first();
+
+            if (!sourceNodeTag) {
+              // 创建"源节点"Tag
+              const result = await env.DB.prepare(
+                "INSERT INTO tags (user_id, tag_name, tag_uuid, description) VALUES (?, ?, ?, ?)"
+              )
+                .bind(
+                  user.id,
+                  "源节点",
+                  crypto.randomUUID(),
+                  "系统自动创建的源节点Tag"
+                )
+                .run();
+              targetTagId = result.meta.last_row_id;
+            } else {
+              targetTagId = sourceNodeTag.id;
+            }
+          }
+
+          const nodeHash = g4(sourceConfig.generated_node);
+
+          // 添加到节点池 - 修复外键约束问题，source_id设为null
+          try {
+            const insertResult = await env.DB.prepare(
+              "INSERT OR IGNORE INTO node_pool (user_id, source_id, node_url, node_hash, status) VALUES (?, ?, ?, ?, 'active')"
+            )
+              .bind(
+                user.id,
+                null, // source_id设为null，因为这是从源节点配置导入的，不是从订阅源导入的
+                sourceConfig.generated_node,
+                nodeHash
+              )
+              .run();
+
+            let nodeId;
+            if (insertResult.meta.changes > 0) {
+              // 新插入的节点
+              nodeId = insertResult.meta.last_row_id;
+            } else {
+              // 节点已存在，查找现有节点ID
+              const existingNode = await env.DB.prepare(
+                "SELECT id FROM node_pool WHERE user_id = ? AND node_hash = ?"
+              )
+                .bind(user.id, nodeHash)
+                .first();
+              nodeId = existingNode.id;
+            }
+
+            // 将节点添加到Tag
+            await env.DB.prepare(
+              "INSERT OR IGNORE INTO node_tag_map (tag_id, node_id) VALUES (?, ?)"
+            )
+              .bind(targetTagId, nodeId)
+              .run();
+          } catch (error) {
+            return new Response(
+              JSON.stringify({
+                error: `Failed to import node: ${error.message}`,
+              }),
+              {
+                status: 500,
+                headers: { "Content-Type": "application/json" },
+              }
+            );
+          }
+
+          return new Response(
+            JSON.stringify({
+              message: "Import successful",
+              tag_id: targetTagId,
+            }),
+            {
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        } catch (e) {
+          return new Response(
+            JSON.stringify({
+              error: `Operation failed: ${e.message}`,
+            }),
+            {
+              status: 500,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        }
+      }
     }
 
     return new Response("Not Found", { status: 404 });
